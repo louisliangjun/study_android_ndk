@@ -1,0 +1,60 @@
+#!./vlua
+
+dofile('./vmake_base.lua')
+
+local CC = 'gcc'
+local CFALGS = '-Wall'
+local AR = 'ar -rc'
+local OBJPATH = 'release'
+local EXESUFFIX = ''
+local DLLSUFFIX = '.so'
+
+if vlua.OS=='windows' then
+	EXESUFFIX = '.exe'
+	DLLSUFFIX = '.dll'
+end
+
+local LUA_PATH = '../3rd/lua-5.3.4/src'
+
+local function make_c2objs(srcs, obj_path, include_paths, ...)	-- ... is cflags
+	local flags = args_concat(...)
+	local incs = array_convert(include_paths, function(v) return '-I'..v end)
+	return make_objs(srcs, obj_path, include_paths, function(t) return CC, CFLAGS, flags, incs, '-o', t.obj, '-c', t.src end)
+end
+
+vmake_target_add('lua53', function(target)
+	local incs = {}
+	local lua_cflags = (vlua.OS~='windows') and '-DLUA_USE_LINUX' or ''
+	local srcs = scan_files(LUA_PATH, function(f)
+			if f=='lua.c' then return false end
+			if f=='luac.c' then return false end
+			return f:match('^.+%.[cC]$')~=nil
+	end)
+	-- for i,v in ipairs(srcs) do print(i,v) end
+	local objs = make_c2objs(srcs, OBJPATH, incs, lua_cflags)
+	local output = string.format('%s/lib%s.a', OBJPATH, target)
+	return make_target(output, objs, AR, output, objs)
+end)
+
+vmake_target_add('vlua', function(target)
+	local slibs = vmake('lua53')
+	local incs = { LUA_PATH }
+	local objs = make_c2objs({'vlua.c'}, OBJPATH, incs)
+	local output = string.format('v%s%s', target, EXESUFFIX)
+	return make_target(output, {objs, slibs}, CC, CFLAGS, '-o', output, objs, slibs, '-lm')
+end)
+
+vmake_target_add('clean', function(target)
+	os.execute('rm -rf ' .. OBJPATH)
+	os.remove('vvlua'..EXESUFFIX)
+end)
+
+vmake_target_add('', function(target)
+	vmake('vlua')
+	for k,v in ipairs(vlua.fetch_args()) do
+		print(k,v, v:match('^%w+$'))
+	end
+	print('jobs:', vlua.match_arg('^%-j(%d+)$'))
+	print('target:', vlua.match_arg('^%w+$'))
+end)
+

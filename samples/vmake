@@ -1,0 +1,102 @@
+#!../tools/vlua
+
+dofile('../tools/vmake_base.lua')
+
+local function path_concat(...)
+	return table.concat(array_pack(...), '/')
+end
+
+if vlua.OS=='windows' then
+	path_concat = function(...)
+		local pth = table.concat(array_pack(...), '/')
+		return pth:gsub('^/(%w)(.*)$', '%1:%2'):gsub('/','\\')
+	end
+end
+
+local NDK_ROOT   = '/d/android-sdk/ndk-bundle'
+local API_LEVEL  = 21
+local ARCH       = 'x86_64'
+local HOST       = 'windows-x86_64'
+local TOOLCHAIN  = 'x86_64-4.9'		-- ndk-bundle/toolchains/<TOOLCHAIN>
+local CMD_PREFIX = 'x86_64-linux-android-'
+
+local SYS_ROOT       = path_concat(NDK_ROOT, 'platforms', 'android-'..API_LEVEL, 'arch-'..ARCH)
+local HOSTTOOL_PATH  = path_concat(NDK_ROOT, 'prebuilt', HOST)
+local CHAINTOOL_PATH = path_concat(NDK_ROOT, 'toolchains', TOOLCHAIN, 'prebuilt', HOST)
+
+local function host_path(pth) return pth end
+
+local CC        = path_concat(CHAINTOOL_PATH, 'bin', CMD_PREFIX..'gcc')
+local CXX       = path_concat(CHAINTOOL_PATH, 'bin', CMD_PREFIX..'g++')
+local AR        = path_concat(CHAINTOOL_PATH, 'bin', CMD_PREFIX..'ar -rc')
+local CFLAGS    = {'-Wall', '--sysroot='..path_concat(SYS_ROOT)}
+local LIBS		= {}
+local OBJPATH   = 'release'
+
+-- local toolchain = vlua.match_arg('^%-%-toolchain=(.*)$')
+
+-- debug version use -debug
+-- 
+if vlua.match_arg('^%-debug$') then
+	OBJPATH = 'debug'
+	CFLAGS = array_pack(CFLAGS, '-g')
+else
+	CFLAGS = array_pack(CFLAGS, '-O2')
+end
+
+local LUA_PATH = '../3rd/lua-5.3.4/src'
+
+local SAMPLE_CFLAGS = {}
+local SAMPLE_INCS = {}
+local SAMPLE_LIBS = { LIBS }
+
+local function make_c2objs(srcs, obj_path, include_paths, ...)	-- ... is cflags
+	local flags = args_concat(...)
+	local incs = array_convert(include_paths, function(v) return '-I'..v end)
+	return make_objs(srcs, obj_path, include_paths, function(t) return CC, CFLAGS, flags, incs, '-o', t.obj, '-c', t.src end)
+end
+
+local function make_cpp2objs(srcs, obj_path, include_paths, ...)	-- ... is cflags
+	local flags = args_concat(...)
+	local incs = array_convert(include_paths, function(v) return '-I'..v end)
+	return make_objs(srcs, obj_path, include_paths, function(t) return CXX, CFLAGS, flags, incs, '-o', t.obj, '-c', t.src end)
+end
+
+vmake_target_add('clean', function(target)
+	if vlua.OS=='windows' then
+		os.execute('del /S /Q debug')
+		os.execute('del /S /Q release')
+	else
+		os.execute('rm -rf debug')
+		os.execute('rm -rf release')
+	end
+end)
+
+vmake_target_add('lua53', function(target)
+	local incs = {}
+	local lua_cflags = '-DLUA_USE_LINUX'
+	local srcs = scan_files(LUA_PATH, function(f)
+			if f=='lua.c' then return false end
+			if f=='luac.c' then return false end
+			return f:match('^.+%.c$')~=nil
+	end)
+	local objs = make_c2objs(srcs, OBJPATH, incs, lua_cflags)
+	local output = string.format('%s/lib%s.a', OBJPATH, target)
+	return make_target(output, objs, AR, output, objs)
+end)
+
+local function make_sample(target)
+	local slibs = vmake('lua53')
+	local srcs = {target..'.cpp'}
+	local objs = make_cpp2objs(srcs, OBJPATH, SAMPLE_INCS, SAMPLE_CFLAGS)
+	local output = string.format('%s/%s%s', OBJPATH, target, DLLSUFFIX)
+	return make_target(output, objs, CXX, CFLAGS, '-shared', '-o', output, objs, SAMPLE_LIBS)
+end
+
+vmake_target_add('t1', make_sample)
+vmake_target_add('t2', make_sample)
+
+vmake_target_add('', function(target)
+	vmake('t1', 't2')
+end)
+
