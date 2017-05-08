@@ -69,8 +69,8 @@ end
 
 vmake_target_add('clean', function(target)
 	if vlua.OS=='windows' then
-		os.execute('del /S /Q debug')
-		os.execute('del /S /Q release')
+		os.execute('rd /S /Q debug')
+		os.execute('rd /S /Q release')
 	else
 		os.execute('rm -rf debug')
 		os.execute('rm -rf release')
