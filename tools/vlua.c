@@ -181,8 +181,8 @@ static int lua_match_arg(lua_State* L) {
 #define TNULL		7
 #define TTREF		8
 
-#define DEPTH_MAX	32
-#define ARG_MAX		32
+#define PICKLE_DEPTH_MAX	32
+#define PICKLE_ARG_MAX		32
 
 // pickle mem buffer
 
@@ -347,7 +347,7 @@ static inline void _pack_tbl(LPacker* pac, int idx) {
 		}
 
 		pac->depth++;
-		if( pac->depth > DEPTH_MAX ) {
+		if( pac->depth > PICKLE_DEPTH_MAX ) {
 			luaL_error(L, "pack table too depth!");
 
 		} else if( n ) {
@@ -446,7 +446,7 @@ static inline const char* _unpack_tbl(LUnPacker* upac, const char* pkt) {
 		pkt += 4;
 
 		upac->depth++;
-		if( upac->depth > DEPTH_MAX ) {
+		if( upac->depth > PICKLE_DEPTH_MAX ) {
 			luaL_error(L, "unpack table too depth!");
 
 		} else if( narr>=0 ) {
@@ -578,9 +578,9 @@ static void _lua_pickle_pack(LPacker* pac, int start, int end) {
 	if( start > end )
 		luaL_error(L, "start > end");
 	n = end - start + 1;
-	if( n > ARG_MAX )
-		luaL_error(L, "arg count MUST <= %d", ARG_MAX);
-	luaL_checkstack(L, (8 + 2*DEPTH_MAX), "pickle pack check stack failed!");	// luaL_Buffer, error, every depth(k, v) & keep free 6 space
+	if( n > PICKLE_ARG_MAX )
+		luaL_error(L, "arg count MUST <= %d", PICKLE_ARG_MAX);
+	luaL_checkstack(L, (8 + 2*PICKLE_DEPTH_MAX), "pickle pack check stack failed!");	// luaL_Buffer, error, every depth(k, v) & keep free 6 space
 
 	_pickle_addbuf(L, pac, NULL, 1 + 4);	// skip n, nref
 
@@ -633,9 +633,9 @@ static int _pickle_unpack(LUnPacker* upac) {
 	memcpy(&(upac->nref), ps, 4);
 	ps += 4;
 
-	if( n<0 && n>ARG_MAX )
+	if( n<0 && n>PICKLE_ARG_MAX )
 		luaL_error(L, "pkt bad format, narg out of range");
-	luaL_checkstack(L, (n + 1 + (2*DEPTH_MAX + 8)), "pickle unpack check stack failed!");	// narg + refs + every depth(last value) & keep free 8 space
+	luaL_checkstack(L, (n + 1 + (2*PICKLE_DEPTH_MAX + 8)), "pickle unpack check stack failed!");	// narg + refs + every depth(last value) & keep free 8 space
 	if( upac->nref ) {
 		_pickle_push_ref_table(L, 1);
 		upac->tref = lua_gettop(L);

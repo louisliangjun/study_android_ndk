@@ -89,7 +89,7 @@ local function make_sample(target)
 	local slibs = vmake('lua53')
 	local srcs = {target..'.cpp'}
 	local objs = make_cpp2objs(srcs, OBJPATH, SAMPLE_INCS, SAMPLE_CFLAGS)
-	local output = string.format('%s/%s%s', OBJPATH, target, DLLSUFFIX)
+	local output = string.format('%s/%s.so', OBJPATH, target)
 	return make_target(output, objs, CXX, CFLAGS, '-shared', '-o', output, objs, SAMPLE_LIBS)
 end
 
