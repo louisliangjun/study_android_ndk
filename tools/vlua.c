@@ -1,8 +1,12 @@
 // vlua.c
 // 
-// compile :
-//  cd ../3rd/lua-5.3.4 && make mingw -j8
-//  gcc -s -O2 -pthread -Wall -I../3rd/lua-5.3.4/src -o vlua ./vlua.c ../3rd/lua-5.3.4/src/liblua.a -lm
+// compile on mingw:
+//   cd ../3rd/lua-5.3.4 && make mingw -j8
+//   gcc -s -O2 -pthread -Wall -I../3rd/lua-5.3.4/src -o vlua ./vlua.c ../3rd/lua-5.3.4/src/liblua.a -lm
+// 
+// compile on linux:
+//   gcc -s -O2 -pthread -Wall -DLUA_USE_LINUX -I../3rd/lua-5.3.4/src -o vlua ./vlua.c ../3rd/lua-5.3.4/src/liblua.a -lm -ldl
+// 
 
 #ifdef _WIN32
 	#undef _WIN32_WINNT
@@ -925,28 +929,28 @@ static VLUA_THREAD_DECLARE(work_thread, _arg) {
 	lua_State* L = arg->state;
 	VLuaThreadTask* task = NULL;
 
-	for(;;) {
+	while( L ) {
 		task = vlua_thread_task_mq_pop(&(pool->req_mq), 0xFFFFFFFF);
 		if( !task )
 			continue;
 
-		if( task->req && !(pool->stop) ) {
-			lua_settop(L, 0);
-			lua_pushlightuserdata(L, task);
-			lua_pushcclosure(L, _lua_task_execute, 1);
-			task->resp_res = vlua_pcall_stacktrace(L, 0, 0);
-			if( task->resp_res ) {
-				size_t n = 0;
-				const char* e = lua_tolstring(L, -1, &n);
-				thread_task_reset_packet(task, e, n);
+		if( task->req ) {
+			if( !(pool->stop) ) {
+				lua_settop(L, 0);
+				lua_pushlightuserdata(L, task);
+				lua_pushcclosure(L, _lua_task_execute, 1);
+				task->resp_res = vlua_pcall_stacktrace(L, 0, 0);
+				if( task->resp_res ) {
+					size_t n = 0;
+					const char* e = lua_tolstring(L, -1, &n);
+					thread_task_reset_packet(task, e, n);
+				}
 			}
+		} else {
+			L = NULL;	// used for break
 		}
 		vlua_thread_task_mq_push(&(pool->resp_mq), task);
-
-		if( task->req==NULL )
-			break;
 	}
-
 	return 0;
 }
 
@@ -1128,7 +1132,6 @@ static int lua_thread_pool_create(lua_State* L) {
 			size_t len = 0;
 			const char* str = lua_tolstring(state, -1, &len);
 			lua_pushlstring(L, str, len);
-			lua_close(state);
 			goto error_return;
 		}
 	}
@@ -1470,7 +1473,7 @@ static int run(lua_State* L, const char* script, int is_script_file) {
 		"end\n"
 		"\n"
 		"function main()\n"
-		"	local target = vlua.match_arg('^%w+$') or '' -- make target, default ''\n"
+		"	local target = vlua.match_arg('^[_%w]+$') or '' -- make target, default ''\n"
 		"	-- print('start vmake target \"'..tostring(target)..'\"')\n"
 		"	vmake(target)\n"
 		"end\n"

@@ -13,11 +13,16 @@ if vlua.OS=='windows' then
 	end
 end
 
+local JDK_ROOT   = '/d/android-sdk/jdk1.8.0_121'
+local SDK_ROOT   = '/d/android-sdk'
+
+local JAVAH    = path_concat(JDK_ROOT, 'bin', 'javah')
+
 local NDK_ROOT   = '/d/android-sdk/ndk-bundle'
 local API_LEVEL  = 21
 local ARCH       = 'x86_64'
 local HOST       = 'windows-x86_64'
-local TOOLCHAIN  = 'x86_64-4.9'		-- ndk-bundle/toolchains/<TOOLCHAIN>
+local TOOLCHAIN  = 'x86_64-4.9'
 local CMD_PREFIX = 'x86_64-linux-android-'
 
 local SYS_ROOT       = path_concat(NDK_ROOT, 'platforms', 'android-'..API_LEVEL, 'arch-'..ARCH)
@@ -85,18 +90,23 @@ vmake_target_add('lua53', function(target)
 	return make_target(output, objs, AR, output, objs)
 end)
 
-local function make_sample(target)
+vmake_target_add('t1_jni', function(target)
+	local jni_h = 't1_androidos_jni_JNI.h'
+	local srcs = {'t1/androidos/jni/JNI.java'}
+	for _, src in ipairs(srcs) do
+		local pkg = src:gsub('^(.*)%.java$', '%1'):gsub('/','.')
+		local dst = string.format('%s/%s', target, src:gsub('^(.*)%.java$', '%1.h'):gsub('/','_'))
+		make_target(dst, {src}, JAVAH, '-classpath .', '-o', dst, '-jni', pkg)
+	end
+
 	local slibs = vmake('lua53')
-	local srcs = {target..'.cpp'}
+	local srcs = scan_files(target, function(f) return f:match('^.+%.cpp$')~=nil end)
 	local objs = make_cpp2objs(srcs, OBJPATH, SAMPLE_INCS, SAMPLE_CFLAGS)
 	local output = string.format('%s/%s.so', OBJPATH, target)
 	return make_target(output, objs, CXX, CFLAGS, '-shared', '-o', output, objs, SAMPLE_LIBS)
-end
-
-vmake_target_add('t1', make_sample)
-vmake_target_add('t2', make_sample)
+end)
 
 vmake_target_add('', function(target)
-	vmake('t1', 't2')
+	vmake('t1_jni')
 end)
 
