@@ -48,7 +48,7 @@ function args_concat(...)
 	return table.concat(array_pack(...), ' ')
 end
 
-function scan_files(path, matcher)
+function scan_files(path, matcher, no_loop)
 	local last = path:sub(-1)
 	if last~='/' and last~='\\' then path = path .. '/' end
 	local outs = {}
@@ -60,11 +60,31 @@ function scan_files(path, matcher)
 				table.insert(outs, pth .. f)
 			end
 		end
+		if no_loop then return end
 		for _,d in ipairs(ds) do scan(pth .. d .. '/') end
 	end
 
 	scan(path)
 	return outs
+end
+
+function path_concat(...)
+	return table.concat(array_pack(...), '/')
+end
+
+if vlua.OS=='windows' then
+	path_concat = function(...)
+		local pth = table.concat(array_pack(...), '/')
+		return pth:gsub('^/(%w)(.*)$', '%1:%2'):gsub('/','\\')
+	end
+end
+
+function shell(...)
+	local cmd = args_concat(...)
+	local p = io.popen(cmd)
+	local r = p:read('*a'):match('^%s*(.-)%s*$')
+	p:close()
+	return r
 end
 
 -- thread tasks
@@ -239,8 +259,9 @@ end
 function compile_tasks_build(tasks, command_build)	-- command_build(task) is commands
 	assert( vlua.thread_pool, "MUST in main thread!" )
 	for _, t in pairs(tasks) do
-		-- print('start run:', t.src, 'check_deps_execute', t.obj, t.deps, command_build(t))
-		vlua.thread_pool:run(t.src, 'check_deps_execute', t.obj, t.deps, command_build(t))
+		local deps = next(t.deps) and t.deps or {t.src}
+		-- print('start run:', t.src, 'check_deps_execute', t.obj, deps, command_build(t))
+		vlua.thread_pool:run(t.src, 'check_deps_execute', t.obj, deps, command_build(t))
 	end
 	vlua.thread_pool:wait(function(src, ok, res, code)
 		if not ok then

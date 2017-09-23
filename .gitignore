@@ -1,6 +1,9 @@
-3rd
-tools/release
+android-ndk
+android-sdk
+android-studio
 tools/vlua
 tools/vlua.exe
 samples/release
-samples/t1_jni/t1_androidos_jni_JNI.h
+samples/debug
+
+

@@ -1,59 +1,25 @@
 #!../tools/vlua
 
+-- usage : ./vmake [target] [-api=21] [-arch=x86_64|arm|arm64|...] [-debug]
+
 dofile('../tools/vmake_base.lua')
 
-local function path_concat(...)
-	return table.concat(array_pack(...), '/')
-end
+local _TARGET_ARCH = vlua.match_arg('^%-arch=(.*)$') or 'x86_64'
+local _API_LEVEL   = vlua.match_arg('^%-api=(.*)$') or '21'
+local _DEBUG       = vlua.match_arg('^%-debug$')
 
-if vlua.OS=='windows' then
-	path_concat = function(...)
-		local pth = table.concat(array_pack(...), '/')
-		return pth:gsub('^/(%w)(.*)$', '%1:%2'):gsub('/','\\')
-	end
-end
-
-local JDK_ROOT   = '/d/android-sdk/jdk1.8.0_121'
-local SDK_ROOT   = '/d/android-sdk'
-
-local JAVAH    = path_concat(JDK_ROOT, 'bin', 'javah')
-
-local NDK_ROOT   = '/d/android-sdk/ndk-bundle'
-local API_LEVEL  = 21
-local ARCH       = 'x86_64'
-local HOST       = 'windows-x86_64'
-local TOOLCHAIN  = 'x86_64-4.9'
-local CMD_PREFIX = 'x86_64-linux-android-'
-
-local SYS_ROOT       = path_concat(NDK_ROOT, 'platforms', 'android-'..API_LEVEL, 'arch-'..ARCH)
-local HOSTTOOL_PATH  = path_concat(NDK_ROOT, 'prebuilt', HOST)
-local CHAINTOOL_PATH = path_concat(NDK_ROOT, 'toolchains', TOOLCHAIN, 'prebuilt', HOST)
-
-local function host_path(pth) return pth end
-
-local CC        = path_concat(CHAINTOOL_PATH, 'bin', CMD_PREFIX..'gcc')
-local CXX       = path_concat(CHAINTOOL_PATH, 'bin', CMD_PREFIX..'g++')
-local AR        = path_concat(CHAINTOOL_PATH, 'bin', CMD_PREFIX..'ar -rc')
-local CFLAGS    = {'-Wall', '--sysroot='..path_concat(SYS_ROOT)}
-local LIBS		= {}
-local OBJPATH   = 'release'
-
--- local toolchain = vlua.match_arg('^%-%-toolchain=(.*)$')
-
--- debug version use -debug
--- 
-if vlua.match_arg('^%-debug$') then
-	OBJPATH = 'debug'
-	CFLAGS = array_pack(CFLAGS, '-g')
-else
-	CFLAGS = array_pack(CFLAGS, '-O2')
-end
-
-local LUA_PATH = '../3rd/lua-5.3.4/src'
-
-local SAMPLE_CFLAGS = {}
-local SAMPLE_INCS = {}
-local SAMPLE_LIBS = { LIBS }
+local NDK_ROOT  = '../android-ndk'
+local HOST      = (vlua.OS=='windows') and 'windows-x86_64' or 'linux-x86_64'
+local TOOLCHAIN = 'x86_64-4.9'
+local CC        = path_concat(NDK_ROOT, 'toolchains', TOOLCHAIN, 'prebuilt', HOST, 'bin', 'x86_64-linux-android-gcc')
+local CXX       = path_concat(NDK_ROOT, 'toolchains', TOOLCHAIN, 'prebuilt', HOST, 'bin', 'x86_64-linux-android-g++')
+local AR        = path_concat(NDK_ROOT, 'toolchains', TOOLCHAIN, 'prebuilt', HOST, 'bin', 'x86_64-linux-android-ar -rc')
+local LIBS      = {}
+local OBJPATH   = _DEBUG and 'debug' or 'release'
+local CFLAGS    = { '-Wall'
+				  , '--sysroot='..path_concat(NDK_ROOT, 'platforms', 'android-'.._API_LEVEL, 'arch-'.._TARGET_ARCH)
+				  , _DEBUG and '-g' or '-O2'
+				  }
 
 local function make_c2objs(srcs, obj_path, include_paths, ...)	-- ... is cflags
 	local flags = args_concat(...)
@@ -90,23 +56,19 @@ vmake_target_add('lua53', function(target)
 	return make_target(output, objs, AR, output, objs)
 end)
 
-vmake_target_add('t1_jni', function(target)
-	local jni_h = 't1_androidos_jni_JNI.h'
-	local srcs = {'t1/androidos/jni/JNI.java'}
-	for _, src in ipairs(srcs) do
-		local pkg = src:gsub('^(.*)%.java$', '%1'):gsub('/','.')
-		local dst = string.format('%s/%s', target, src:gsub('^(.*)%.java$', '%1.h'):gsub('/','_'))
-		make_target(dst, {src}, JAVAH, '-classpath .', '-o', dst, '-jni', pkg)
-	end
+vmake_target_add('demo1', function(target)
+	local slibs = {}-- vmake('ks')
+	local incs = { '.' }
+	local objs = make_cpp2objs(target, OBJPATH, incs)
+	local output = string.format('%s/%s%s', OBJPATH, target, EXESUFFIX)
+	return make_target(output, {objs, slibs}, CXX, CFLAGS, '-o', output, objs, slibs)
+end)
 
-	local slibs = vmake('lua53')
-	local srcs = scan_files(target, function(f) return f:match('^.+%.cpp$')~=nil end)
-	local objs = make_cpp2objs(srcs, OBJPATH, SAMPLE_INCS, SAMPLE_CFLAGS)
-	local output = string.format('%s/%s.so', OBJPATH, target)
-	return make_target(output, objs, CXX, CFLAGS, '-shared', '-o', output, objs, SAMPLE_LIBS)
+vmake_target_add('all', function(target)
+	vmake('demo1')
 end)
 
 vmake_target_add('', function(target)
-	vmake('t1_jni')
+	print('usage : ./vmake [target] [-api=21] [-arch=x86_64|arm|arm64|...] [-debug]')
 end)
 
