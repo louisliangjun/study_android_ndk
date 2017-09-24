@@ -19,10 +19,10 @@ local CC        = _TOOLCHAIN_BIN_PREFIX..'gcc'
 local CXX       = _TOOLCHAIN_BIN_PREFIX..'g++'
 local AR        = _TOOLCHAIN_BIN_PREFIX..'ar'
 local OBJPATH   = path_concat(_DEBUG and 'debug' or 'release', 'objs', _ARCH)
-local CFLAGS    = { '-Wall', '-Werror'
-				  , _DEBUG and '-g' or '-O2'
-				  , '--sysroot='..get_android_sysroot(_NDK_ROOT, _ARCH, _API_LEVEL)
-				  }
+local CFLAGS    = array_pack(get_android_cflags(_NDK_ROOT, _ARCH, _API_LEVEL)
+					, '-Wall', '-Werror'
+					, _DEBUG and '-g' or '-O2'
+					)
 
 local LUA_PATH  = '../3rd/lua53'
 
@@ -77,8 +77,13 @@ vmake_target_add('demo1', function(target)
 	local libs = {'-llog', '-landroid'}
 	local incs = { string.format('%s/sources/android/native_app_glue', _NDK_ROOT) }
 	local objs = make_c2objs(path_concat(target,'src'), OBJPATH, incs)
-	local output = path_concat(_DEBUG and 'debug' or 'release', 'lib', _ARCH, string.format('lib%s.so', target))
-	return make_target(output, {objs, slibs}, CC, CFLAGS, '-shared', '-o', output, objs, slibs, libs)
+	local output = path_concat(_DEBUG and 'debug' or 'release'
+					, 'lib', get_android_abi(_ARCH)
+					, string.format('lib%s.so', target)
+					)
+	return make_target(output, {objs, slibs}
+			, CC, CFLAGS, get_android_linker_flags(_ARCH)
+			, '-shared', '-o', output, objs, slibs, libs)
 end)
 
 vmake_target_add('all', function(target)
