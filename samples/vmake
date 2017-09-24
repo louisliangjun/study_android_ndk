@@ -1,46 +1,54 @@
 #!../tools/vlua
 
--- usage : ./vmake [target] [-api=21] [-arch=x86_64|arm|arm64|...] [-debug]
+-- usage : ./vmake <target> [-arch=*|x86_64|arm|arm64|...] [-api=21] [-debug]
 
 dofile('../tools/vmake_base.lua')
+dofile('../tools/vmake_android.lua')
 
-local _TARGET_ARCH = vlua.match_arg('^%-arch=(.*)$') or 'x86_64'
+local _NDK_ROOT    = '../android-ndk'
+local _ARCH        = vlua.match_arg('^%-arch=(.*)$') or '*'
+local _GCC_VERSION = vlua.match_arg('^%-gcc%-ver=(.*)$') or '4.9'
 local _API_LEVEL   = vlua.match_arg('^%-api=(.*)$') or '21'
 local _DEBUG       = vlua.match_arg('^%-debug$')
 
-local NDK_ROOT  = '../android-ndk'
-local HOST      = (vlua.OS=='windows') and 'windows-x86_64' or 'linux-x86_64'
-local TOOLCHAIN = 'x86_64-4.9'
-local CC        = path_concat(NDK_ROOT, 'toolchains', TOOLCHAIN, 'prebuilt', HOST, 'bin', 'x86_64-linux-android-gcc')
-local CXX       = path_concat(NDK_ROOT, 'toolchains', TOOLCHAIN, 'prebuilt', HOST, 'bin', 'x86_64-linux-android-g++')
-local AR        = path_concat(NDK_ROOT, 'toolchains', TOOLCHAIN, 'prebuilt', HOST, 'bin', 'x86_64-linux-android-ar -rc')
-local LIBS      = {}
-local OBJPATH   = _DEBUG and 'debug' or 'release'
-local CFLAGS    = { '-Wall'
-				  , '--sysroot='..path_concat(NDK_ROOT, 'platforms', 'android-'.._API_LEVEL, 'arch-'.._TARGET_ARCH)
+if _ARCH=='*' then return vmake_target_with_all_archs(_NDK_ROOT, _API_LEVEL) end
+
+local _TOOLCHAIN_BIN_PREFIX = get_gcc_toolchain_binprefix(_NDK_ROOT, _ARCH, _GCC_VERSION)
+
+local CC        = _TOOLCHAIN_BIN_PREFIX..'gcc'
+local CXX       = _TOOLCHAIN_BIN_PREFIX..'g++'
+local AR        = _TOOLCHAIN_BIN_PREFIX..'ar'
+local OBJPATH   = path_concat(_DEBUG and 'debug' or 'release', 'objs', _ARCH)
+local CFLAGS    = { '-Wall', '-Werror'
 				  , _DEBUG and '-g' or '-O2'
+				  , '--sysroot='..get_android_sysroot(_NDK_ROOT, _ARCH, _API_LEVEL)
 				  }
 
+local LUA_PATH  = '../3rd/lua53'
+
+local function c_matcher(f) return f:match('^.+%.c$') end
+local function cpp_matcher(f) return f:match('^.+%.cpp$') end
+
 local function make_c2objs(srcs, obj_path, include_paths, ...)	-- ... is cflags
+	if type(srcs)=='string' then srcs = scan_files(srcs, c_matcher) end
 	local flags = args_concat(...)
 	local incs = array_convert(include_paths, function(v) return '-I'..v end)
 	return make_objs(srcs, obj_path, include_paths, function(t) return CC, CFLAGS, flags, incs, '-o', t.obj, '-c', t.src end)
 end
 
 local function make_cpp2objs(srcs, obj_path, include_paths, ...)	-- ... is cflags
+	if type(srcs)=='string' then srcs = scan_files(srcs, cpp_matcher) end
 	local flags = args_concat(...)
 	local incs = array_convert(include_paths, function(v) return '-I'..v end)
 	return make_objs(srcs, obj_path, include_paths, function(t) return CXX, CFLAGS, flags, incs, '-o', t.obj, '-c', t.src end)
 end
 
 vmake_target_add('clean', function(target)
-	if vlua.OS=='windows' then
-		os.execute('rd /S /Q debug')
-		os.execute('rd /S /Q release')
-	else
-		os.execute('rm -rf debug')
-		os.execute('rm -rf release')
-	end
+	local rm = vlua.OS=='windows' and 'rd /S /Q' or 'rm -rf'
+	os.execute(rm .. ' ' .. path_concat('debug', 'objs', _ARCH))
+	os.execute(rm .. ' ' .. path_concat('debug', 'lib', _ARCH))
+	os.execute(rm .. ' ' .. path_concat('release', 'objs', _ARCH))
+	os.execute(rm .. ' ' .. path_concat('release', 'lib', _ARCH))
 end)
 
 vmake_target_add('lua53', function(target)
@@ -52,16 +60,25 @@ vmake_target_add('lua53', function(target)
 			return f:match('^.+%.c$')~=nil
 	end)
 	local objs = make_c2objs(srcs, OBJPATH, incs, lua_cflags)
-	local output = string.format('%s/lib%s.a', OBJPATH, target)
-	return make_target(output, objs, AR, output, objs)
+	local output = path_concat(OBJPATH, string.format('lib%s.a', target))
+	return make_target(output, objs, AR, '-rc', output, objs)
+end)
+
+vmake_target_add('native_app_glue', function(target)
+	local srcs = path_concat(_NDK_ROOT, 'sources', 'android', target)
+	local incs = {}
+	local objs = make_c2objs(srcs, OBJPATH, incs)
+	local output = path_concat(OBJPATH, string.format('lib%s.a', target))
+	return make_target(output, objs, AR, '-rc', output, objs)
 end)
 
 vmake_target_add('demo1', function(target)
-	local slibs = {}-- vmake('ks')
-	local incs = { '.' }
-	local objs = make_cpp2objs(target, OBJPATH, incs)
-	local output = string.format('%s/%s%s', OBJPATH, target, EXESUFFIX)
-	return make_target(output, {objs, slibs}, CXX, CFLAGS, '-o', output, objs, slibs)
+	local slibs = vmake('native_app_glue')
+	local libs = {'-llog', '-landroid'}
+	local incs = { string.format('%s/sources/android/native_app_glue', _NDK_ROOT) }
+	local objs = make_c2objs(path_concat(target,'src'), OBJPATH, incs)
+	local output = path_concat(_DEBUG and 'debug' or 'release', 'lib', _ARCH, string.format('lib%s.so', target))
+	return make_target(output, {objs, slibs}, CC, CFLAGS, '-shared', '-o', output, objs, slibs, libs)
 end)
 
 vmake_target_add('all', function(target)
@@ -69,6 +86,6 @@ vmake_target_add('all', function(target)
 end)
 
 vmake_target_add('', function(target)
-	print('usage : ./vmake [target] [-api=21] [-arch=x86_64|arm|arm64|...] [-debug]')
+	print('usage : ./vmake <target> [-arch=*|x86_64|arm|arm64|...] [-api=21] [-debug]')
 end)
 

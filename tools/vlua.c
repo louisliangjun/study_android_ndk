@@ -81,6 +81,8 @@ enum BuiltinLuaRIDX
 #define vlua_builtin_ridx_rawget(L,ridx)	lua_rawgeti((L), LUA_REGISTRYINDEX, (ridx))
 #define vlua_builtin_ridx_rawset(L,ridx)	lua_rawseti((L), LUA_REGISTRYINDEX, (ridx))
 
+static const char*	vlua_self = NULL;
+static const char*	vlua_script = NULL;
 static int			vlua_argc = 0;
 static const char*	vlua_argv[256];
 
@@ -139,6 +141,15 @@ not_found:
 }
 
 // args
+
+static int lua_fetch_self(lua_State* L) {
+	lua_pushstring(L, vlua_self);
+	if( vlua_script ) {
+		lua_pushstring(L, vlua_script);
+		return 2;
+	}
+	return 1;
+}
 
 static int lua_fetch_args(lua_State* L) {
 	int i;
@@ -1646,7 +1657,8 @@ static int lua_sha1sum(lua_State* L) {
 // vlua lib for build
 // 
 static const luaL_Reg vlua_methods[] =
-	{ {"fetch_args", lua_fetch_args}
+	{ {"fetch_self", lua_fetch_self}
+	, {"fetch_args", lua_fetch_args}
 	, {"match_arg", lua_match_arg}
 	, {"pack", lua_pickle_pack}
 	, {"unpack", lua_pickle_unpack}
@@ -1830,6 +1842,9 @@ int main(int argc, char** argv) {
 
 	if( !script )
 		return show_help();
+
+	vlua_self = argv[0];
+	vlua_script = script;
 
 	L = vlua_state_new();
 	if( is_script_file ) {

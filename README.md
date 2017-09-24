@@ -7,24 +7,25 @@ project file struct
 ```
 <this-dir>
   |
-  +-- <android-ndk>        # android-ndk root path
+  +-- <android-ndk>    # android-ndk root path
   |
-  +-- <3rd>                # some useful thrid-part-libs
+  +-- <3rd>            # some useful thrid-part-libs
   |
   +-- <samples>
   |     |
   |     +-- <demoXXX>
   |     |
-  |     +-- vmake          # samples used makefile with vlua
-  |     +-- vmake.cmd      # windows used vmake
+  |     +-- vmake      # samples used makefile with vlua
+  |     +-- vmake.cmd  # windows used vmake
   |
   +-- <tools>
   |     |
-  |     +-- vlua/vlua.exe  # NOTICE : need build from vlua.c & lua53
-  |     +-- vlua.c         # vlua source code
-  |     +-- vmake_base.lua # vmake used lua utils
+  |     +-- vlua/vlua.exe     # NOTICE : need build from vlua.c & lua53
+  |     +-- vlua.c            # vlua source code
+  |     +-- vmake_base.lua    # vmake used lua utils
+  |     +-- vmake_android.lua # vmake used lua android utils
   |
-  +-- readme.txt	# this file
+  +-- readme.txt	   # this file
 ```
 
 vlua - make tool with lua script
