@@ -52,7 +52,8 @@ local _ABI_FLAGS =
 
 -- android environ exports
 -- 
-ANDROID_NDK_ROOT         = '../android-ndk'
+ANDROID_SDK_ROOT         = path_concat('..', 'android-sdk')
+ANDROID_NDK_ROOT         = path_concat('..', 'android-ndk')
 ANDROID_ARCH             = vlua.match_arg('^%-arch=(.*)$') or '*'
 ANDROID_API_LEVEL        = vlua.match_arg('^%-api=(.*)$') or '21'
 ANDROID_GCC_VERSION      = vlua.match_arg('^%-gcc%-ver=(.*)$') or '4.9'
@@ -90,6 +91,8 @@ ANDROID_LINKER_FLAGS =
 	, '-Wl,--warn-shared-textrel'
 	, '-Wl,--fatal-warnings'
 	}
+
+ANDROID_SDK_BUILD_TOOL_ROOT = path_concat(ANDROID_SDK_ROOT, 'build-tools', '26.0.1') 
 
 if ANDROID_TOOLCHAIN_ABI=='armeabi' then
 	ANDROID_CFLAGS = array_pack(ANDROID_CFLAGS, '-march=armv5te', '-mtune=xscale', '-msoft-float')

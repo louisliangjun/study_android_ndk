@@ -2,41 +2,65 @@
 
 assert( ANDROID_ARCH, 'MUST after include vmake_android.lua')
 
-local raw_vmake_target_add = vmake_target_add
-
-vmake_target_add_without_arch = raw_vmake_target_add
-
-local function vmake_target_with_all_archs()
-	vlua.thread_pool = vlua.thread_pool_create(1, vlua.__script)	-- reset 1 thread
-
-	local app, script = vlua.fetch_self()
-	local cmds = { app, script }
-	for _,v in ipairs(vlua.fetch_args()) do
-		if not v:match('^%-arch=(.*)$') then table.insert(cmds, v) end
+function main()
+	local target = vlua.match_arg('^[_%w]+$')
+	if target then
+		vmake(target)
+	else
+		print('usage : ./vmake <target> [-arch=*|x86_64|arm|arm64|...] [-api=21] [-debug]')
 	end
-
-	local fs, ds = vlua.file_list( path_concat(ANDROID_NDK_ROOT, 'platforms', 'android-'..ANDROID_API_LEVEL) )
-	for _, d in ipairs(ds) do
-		local platform = d:match('^arch%-(.+)$')
-		if platform then
-			local cmd = args_concat(cmds, '-arch='..platform)
-			print( cmd )
-			vlua.thread_pool:run(platform, 'os.execute', cmd)
-		end
-	end
-	vlua.thread_pool:wait(function(platform, ok, res, code)
-		if not ok then
-			print( string.format('build platform(%s) failed: %s %s!', platform, res, code) )
-			os.exit(code)
-		end
-	end)
 end
 
 if ANDROID_ARCH=='*' then
-	vmake_target_add = function(target, process)
-		raw_vmake_target_add(target, function(...)
-			return vmake_target_with_all_archs()
-		end)
+	local platforms = {}
+	do
+		local fs, ds = vlua.file_list( path_concat(ANDROID_NDK_ROOT, 'platforms', 'android-'..ANDROID_API_LEVEL) )
+		for _, d in ipairs(ds) do
+			local platform = d:match('^arch%-(.+)$')
+			if platform then table.insert(platforms, platform) end
+		end
+	end
+
+	local function fetch_command_with_out_target_and_arch()
+		local app, script = vlua.fetch_self()
+		local cmds = { app, script }
+		for _,v in ipairs(vlua.fetch_args()) do
+			if v:match('^%-arch=(.*)$') then
+				-- ignore -arch
+			elseif v:match('^[_%w]+$') then
+				-- ignore target
+			elseif v:match('^%-vmake%-depth=.*$') then
+				-- ignore -vlua-depth
+			else
+				table.insert(cmds, v)
+			end
+		end
+		return cmds
+	end
+
+	local raw_vmake = vmake
+
+	vmake = function(...)
+		local cmds = fetch_command_with_out_target_and_arch()
+		local targets = table.pack(...)
+
+		local depth = vlua.match_arg('^%-vmake%-depth=(%d+)$')
+		depth = (math.tointeger(depth) or 0)
+		local vmake_depth = string.format('-vmake-depth=%d', depth+1)
+
+		for _, target in ipairs(targets) do
+			for _, platform in ipairs(platforms) do
+				local vmake_arch = string.format('-arch=%-6s', platform)
+				local cmd = args_concat(cmds, vmake_depth, vmake_arch, target)
+				print( '$ ' .. cmd )
+				if not os.execute(cmd) then os.exit(1) end
+			end
+		end
+
+		if depth==0 then
+			-- TODO : after target build, may apk
+			-- for _, target in ipairs(targets) do end
+		end
 	end
 end
 

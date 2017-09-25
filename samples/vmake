@@ -67,7 +67,7 @@ vmake_target_add('demo1', function(target)
 	local incs = { ANDROID_NDK_ROOT..'/sources/android/native_app_glue' }
 	local objs = make_c2objs(path_concat(target,'src'), incs)
 	local output = path_concat(OUTPATH, 'lib', ANDROID_TOOLCHAIN_ABI, 'lib'..target..'.so')
-	return make_target(output, {objs, slibs}
+	make_target(output, {objs, slibs}
 			, CC, CFLAGS, ANDROID_LINKER_FLAGS
 			, '-shared', '-o', output
 			, objs, slibs, libs
@@ -75,10 +75,6 @@ vmake_target_add('demo1', function(target)
 end)
 
 vmake_target_add('all', function(target)
-	vmake('demo1')
-end)
-
-vmake_target_add_without_arch('', function(target)
-	print('usage : ./vmake <target> [-arch=*|x86_64|arm|arm64|...] [-api=21] [-debug]')
+	vmake('demo1', 'lua53')
 end)
 
