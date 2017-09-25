@@ -24,8 +24,13 @@ end
 
 function array_convert(arr, convert)
 	local outs = {}
-	for _, v in ipairs(arr) do
-		local o = convert(v)
+	if type(arr)=='table' then
+		for _, v in ipairs(arr) do
+			local o = convert(v)
+			if o then table.insert(outs, o) end
+		end
+	elseif arr then
+		local o = convert(arr)
 		if o then table.insert(outs, o) end
 	end
 	return outs
@@ -95,8 +100,8 @@ function fetch_includes_by_regex(src, include_paths)
 	local function search_include_path(inc, paths)
 		if paths==nil then return false end
 		for _, pth in ipairs(paths) do
-			if pth~='' then pth = pth:match('^.*[\\/]$') or (pth .. '/') end
-			local inc_file = pth .. inc
+			if pth~='' then pth = pth:match('^.*[\\/]$') or pth end
+			local inc_file = path_concat(pth, inc)
 			local exist, size, mtime = vlua.file_stat(inc_file)
 			if exist then
 				res[inc_file] = mtime
@@ -245,7 +250,7 @@ function compile_tasks_src2obj(tasks, objpath, parent_replace)
 			obj = obj:gsub('[\\/](%.%.)[\\/]', parent_replace)
 		end
 		if objpath and (not is_abs_path) then
-			obj = objpath .. '/' .. obj
+			obj = path_concat(objpath, obj)
 		end
 		t.obj = obj
 	end

@@ -1,9 +1,12 @@
 // vlua.c
 // 
 // compile : gcc -s -O2 -pthread -Wall -o vlua ./vlua.c -llua -lm -ldl
+// 
 // compile : gcc -s -O2 -pthread -Wall -DLUA_USE_LINUX -I./3rd/lua53 -o vlua ./vlua.c ./3rd/lua53/*.c -lm -ldl
 // 
-// mingw compile : gcc -s -O2 -Wall -I./3rd/lua53 -o vlua ./vlua.c ./3rd/lua53/*.c -lm
+// mingw compile :
+//  cd ../3rd/lua-5.3.4 && make mingw
+//  gcc -s -O2 -Wall -I../3rd/lua-5.3.4/src -o vlua ./vlua.c ../3rd/lua-5.3.4/src/liblua.a -lm
 // 
 
 #ifdef _WIN32
@@ -1732,7 +1735,22 @@ static int run(lua_State* L, const char* script) {
 	const char* main_thread_init_script =
 		"local n = vlua.match_arg('^%-j(%d+)$')\n"
 		"n = math.tointeger(n) or 4\n"
-		"if n > 0 then vlua.thread_pool = vlua.thread_pool_create(n, vlua.__script) end\n"
+		"if n > 0 then\n"
+		"	-- delay create thread pool!\n"
+		"	vlua.thread_pool = setmetatable({}, {__index=function(t,k)\n"
+		"		local pool = rawget(t, '__self')\n"
+		"		if not pool then\n"
+		"			pool = vlua.thread_pool_create(n, vlua.__script)\n"
+		"			rawset(t, '__self', pool)\n"
+		"			vlua.thread_pool = pool\n"
+		"		end\n"
+		"		local elem = pool[k]\n"
+		"		if type(elem)~='function' then return elem end\n"
+		"		local wrapper = function(self, ...) return elem(pool, ...) end\n"
+		"		rawset(t,k,wrapper)\n"
+		"		return wrapper\n"
+		"	end})\n"
+		"end\n"
 		"\n"
 		"local __targets = {}	-- target : process\n"
 		"local __maked_targets = {}\n"
