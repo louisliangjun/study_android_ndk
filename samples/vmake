@@ -4,17 +4,15 @@
 
 dofile('../tools/vmake_base.lua')
 dofile('../tools/vmake_android.lua')
-dofile('../tools/vmake_android_multi_arch.lua')
 
 local _DEBUG       = vlua.match_arg('^%-debug$')
 
 local CC        = ANDROID_TOOLCHAIN_BIN_PREFIX..'gcc'
 local CXX       = ANDROID_TOOLCHAIN_BIN_PREFIX..'g++'
 local AR        = ANDROID_TOOLCHAIN_BIN_PREFIX..'ar'
-local OUTPATH   = _DEBUG and 'debug' or 'release'
-local OBJPATH   = { OUTPATH, 'objs', ANDROID_ARCH }
+local OUTPATH   = _DEBUG and '_debug' or '_release'
 local CFLAGS    = { ANDROID_CFLAGS
-				  , '-Wall', '-Werror'
+				  , '-Wall'
 				  , _DEBUG and '-g' or '-O2'
 				  }
 
@@ -24,50 +22,60 @@ local function make_c2objs(srcs, include_paths, ...)	-- ... is cflags
 	if type(srcs)=='string' then srcs = scan_files(srcs, function(f) return f:match('^.+%.c$') end) end
 	local flags = args_concat(...)
 	local incs = array_convert(include_paths, function(v) return '-I'..v end)
-	return make_objs(srcs, OBJPATH, include_paths, function(t) return CC, CFLAGS, flags, incs, '-o', t.obj, '-c', t.src end)
+	return make_objs(srcs, include_paths
+		, function(f) return path_concat(OUTPATH, 'objs', ANDROID_ARCH, f) end
+		, function(t) return CC, CFLAGS, flags, incs, '-o', t.obj, '-c', t.src end)
 end
 
 local function make_cpp2objs(srcs, include_paths, ...)	-- ... is cflags
 	if type(srcs)=='string' then srcs = scan_files(srcs, function(f) return f:match('^.+%.cpp$') end) end
 	local flags = args_concat(...)
 	local incs = array_convert(include_paths, function(v) return '-I'..v end)
-	return make_objs(srcs, OBJPATH, include_paths, function(t) return CXX, CFLAGS, flags, incs, '-o', t.obj, '-c', t.src end)
+	return make_objs(srcs, include_paths
+		, function(f) return path_concat(OUTPATH, 'objs', ANDROID_ARCH, f) end
+		, function(t) return CXX, CFLAGS, flags, incs, '-o', t.obj, '-c', t.src end)
+end
+
+local function make_ndk_static_lib(target)
+	local src_path, is_abs_path = vlua.filename_format(path_concat(ANDROID_NDK_ROOT, 'sources', 'android', target))
+	local srcs = scan_files(src_path, function(f) return f:match('^.+%.c$') end)
+	local objpath_build = function(f) return path_concat(OUTPATH, 'objs', ANDROID_ARCH, target, f) end
+	if is_abs_path then
+		local src_offset = #src_path + 2
+		objpath_build = function(f) return path_concat(OUTPATH, 'objs', ANDROID_ARCH, target, f:sub(src_offset)) end
+	end
+	local objs = make_objs(srcs, {}, objpath_build, function(t) return CC, CFLAGS, flags, incs, '-o', t.obj, '-c', t.src end)
+	local output = path_concat(OUTPATH, 'objs', ANDROID_ARCH, 'lib'..target..'.a')
+	return make_target(output, objs, AR, '-rc', output, objs)
 end
 
 vmake_target_add('clean', function(target)
 	local rm = vlua.OS=='windows' and 'rd /S /Q ' or 'rm -rf '
-	os.execute(rm .. path_concat('debug', 'objs', ANDROID_ARCH))
-	os.execute(rm .. path_concat('debug', 'lib', ANDROID_ARCH))
-	os.execute(rm .. path_concat('release', 'objs', ANDROID_ARCH))
-	os.execute(rm .. path_concat('release', 'lib', ANDROID_ARCH))
+	os.execute(rm .. '_debug')
+	os.execute(rm .. '_release')
 end)
 
 vmake_target_add('lua53', function(target)
-	local lua_cflags = '-DLUA_USE_LINUX'
+	local lua_cflags = vlua.OS=='windows' and '' or '-DLUA_USE_LINUX'
 	local srcs = scan_files(LUA_PATH, function(f)
-			if f=='lua.c' then return false end
-			if f=='luac.c' then return false end
-			return f:match('^.+%.c$')~=nil
+			if f=='lua.c' then return end
+			if f=='luac.c' then return end
+			return f:match('^.+%.c$')
 	end)
 	local objs = make_c2objs(srcs, {}, lua_cflags)
-	local output = path_concat(OBJPATH, 'lib'..target..'.a')
+	local output = path_concat(OUTPATH, 'objs', ANDROID_ARCH, 'lib'..target..'.a')
 	return make_target(output, objs, AR, '-rc', output, objs)
 end)
 
-vmake_target_add('native_app_glue', function(target)
-	local srcs = path_concat(ANDROID_NDK_ROOT, 'sources', 'android', target)
-	local objs = make_c2objs(srcs)
-	local output = path_concat(OBJPATH, 'lib'..target..'.a')
-	return make_target(output, objs, AR, '-rc', output, objs)
-end)
+vmake_target_add('native_app_glue', make_ndk_static_lib)
 
 vmake_target_add('demo1', function(target)
 	local slibs = vmake('native_app_glue')
 	local libs = {'-llog', '-landroid'}
 	local incs = { ANDROID_NDK_ROOT..'/sources/android/native_app_glue' }
 	local objs = make_c2objs(path_concat(target,'src'), incs)
-	local output = path_concat(OUTPATH, 'lib', ANDROID_TOOLCHAIN_ABI, 'lib'..target..'.so')
-	make_target(output, {objs, slibs}
+	local output = path_concat(OUTPATH, target, 'lib', ANDROID_TOOLCHAIN_ABI, 'lib'..target..'.so')
+	return make_target(output, {objs, slibs}
 			, CC, CFLAGS, ANDROID_LINKER_FLAGS
 			, '-shared', '-o', output
 			, objs, slibs, libs
@@ -75,6 +83,41 @@ vmake_target_add('demo1', function(target)
 end)
 
 vmake_target_add('all', function(target)
-	vmake('demo1', 'lua53')
+	local targets = vmake_target_all()
+	targets.clean = nil
+	targets.all = nil
+	for target in pairs(targets) do vmake(target) end
 end)
+
+local function match_aapt_apk(target, match)
+	if target~=match and match~='all' then return end
+
+	local aapt = path_concat(ANDROID_SDK_BUILD_TOOL_ROOT, 'aapt')
+	local dst = path_concat(OUTPATH, target)
+	local src = path_concat('..', '..', target)
+	local apk = target..'.apk'
+
+	local gen_apk_cmd = args_concat( 'cd '..dst.. ' &&'
+		, aapt, 'p', '-f'
+		, '-F', apk
+		, '-S', path_concat(src, 'res')
+		, '-M', path_concat(src, 'AndroidManifest.xml')
+		, '-I', path_concat(ANDROID_SDK_ROOT, 'platforms', 'android-'..ANDROID_API_LEVEL, 'android.jar')
+		)
+	print(gen_apk_cmd)
+	if not os.execute(gen_apk_cmd) then os.exit(1) end
+
+	-- add libs
+	local libs = scan_files(path_concat(dst, 'lib'), function(v) return v end, true)
+	for _, f in ipairs(libs) do
+		local add_apk_cmd = args_concat('cd '..dst.. ' &&', aapt, 'a', '-v', apk, path_concat('lib', f))
+		print(add_apk_cmd)
+		if not os.execute(add_apk_cmd) then os.exit(1) end
+	end
+end
+
+android_after_vmake_target = function(target)
+	match_aapt_apk('demo1', target)
+	-- match_aapt_apk('demo2', target)
+end
 

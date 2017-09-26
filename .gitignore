@@ -1,9 +1,9 @@
-3rd
-android-ndk
-android-sdk
-tools/vlua
-tools/vlua.exe
-samples/release
-samples/debug
+/3rd
+/android-ndk
+/android-sdk
+/tools/vlua
+/tools/vlua.exe
+/samples/_release
+/samples/_debug
 
 

@@ -53,23 +53,27 @@ function args_concat(...)
 	return table.concat(array_pack(...), ' ')
 end
 
-function scan_files(path, matcher, no_loop)
+function scan_files(path, matcher, no_path_prefix, no_loop)
 	local last = path:sub(-1)
 	if last~='/' and last~='\\' then path = path .. '/' end
 	local outs = {}
 
-	local function scan(pth)
-		local fs, ds = vlua.file_list(pth)
+	local function scan(base, pth)
+		local fs, ds = vlua.file_list(base .. pth)
 		for _,f in ipairs(fs) do
 			if matcher(f) then
 				table.insert(outs, pth .. f)
 			end
 		end
 		if no_loop then return end
-		for _,d in ipairs(ds) do scan(pth .. d .. '/') end
+		for _,d in ipairs(ds) do scan(base, pth .. d .. '/') end
 	end
 
-	scan(path)
+	if no_path_prefix then
+		scan(path, '')
+	else
+		scan('', path)
+	end
 	return outs
 end
 
@@ -80,7 +84,9 @@ end
 if vlua.OS=='windows' then
 	path_concat = function(...)
 		local pth = table.concat(array_pack(...), '/')
-		return pth:gsub('^/(%w)(.*)$', '%1:%2'):gsub('/','\\')
+		pth = pth:gsub('^/(%w)(.*)$', '%1:%2')	-- msys2 - /c/xxx
+		pth = pth:gsub('/','\\')
+		return pth
 	end
 end
 
@@ -239,7 +245,7 @@ function compile_tasks_fetch_deps(tasks, include_paths)
 	end
 end
 
-function compile_tasks_src2obj(tasks, objpath, parent_replace)
+function compile_tasks_src2obj(tasks, objpath_build, parent_replace)
 	for _, t in ipairs(tasks) do
 		local src, is_abs_path = vlua.filename_format(t.src)
 		local prefix, suffix = src:match('(.*)%.([^\\/]*)$')
@@ -249,10 +255,8 @@ function compile_tasks_src2obj(tasks, objpath, parent_replace)
 			obj = obj:gsub('^(%.%.)[\\/]', parent_replace)
 			obj = obj:gsub('[\\/](%.%.)[\\/]', parent_replace)
 		end
-		if objpath and (not is_abs_path) then
-			obj = path_concat(objpath, obj)
-		end
-		t.obj = obj
+		t.obj = objpath_build(obj, is_abs_path)
+		-- print('src2obj', src, obj)
 	end
 end
 
@@ -276,10 +280,10 @@ function compile_tasks_build(tasks, command_build)	-- command_build(task) is com
 	end)
 end
 
-function make_objs(srcs, obj_path, include_paths, command_build)
+function make_objs(srcs, include_paths, objpath_build, command_build)
 	local tasks = compile_tasks_create(srcs)
 	compile_tasks_fetch_deps(tasks, include_paths)
-	compile_tasks_src2obj(tasks, obj_path, '')
+	compile_tasks_src2obj(tasks, objpath_build, '')
 	compile_tasks_make_obj_dirs(tasks)
 	compile_tasks_build(tasks, command_build)
 	return array_convert(tasks, function(t) return t.obj end)
@@ -287,6 +291,6 @@ end
 
 function make_target(target, deps, ...)	-- ... is commands
 	if check_deps_execute(target, deps, ...) then return target end
-	print('make('..target..'): failed!')
+	print('make('..tostring(target)..'): failed!')
 	os.exit(1)
 end

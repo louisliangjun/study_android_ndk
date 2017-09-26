@@ -1250,7 +1250,7 @@ static int lua_filename_format(lua_State* L) {
 
 	luaL_buffinit(L, &B);
 	if( start!=strs ) {
-		luaL_addlstring(&B, start->s, start->n);	// root C: or C:\ or / 
+		luaL_addlstring(&B, strs[0].s, strs[0].n);	// root C: or C:\ or / 
 	}
 	if( start < cur ) {
 		end = cur;
@@ -1755,6 +1755,10 @@ static int run(lua_State* L, const char* script) {
 		"local __targets = {}	-- target : process\n"
 		"local __maked_targets = {}\n"
 		"\n"
+		"function vmake_target_all()\n"
+		"	return __targets\n"
+		"end\n"
+		"\n"
 		"function vmake_target_add(target, process)\n"
 		"	assert(__targets[target]==nil, 'target('..tostring(target)..') already exist!')\n"
 		"	__targets[target] = process\n"
@@ -1785,9 +1789,13 @@ static int run(lua_State* L, const char* script) {
 		"end\n"
 		"\n"
 		"function main()\n"
-		"	local target = vlua.match_arg('^[_%w]+$') or '' -- make target, default ''\n"
-		"	-- print('start vmake target \"'..tostring(target)..'\"')\n"
-		"	vmake(target)\n"
+		"	local targets = {}\n"
+		"	for _,v in ipairs(vlua.fetch_args()) do\n"
+		"		local t = v:match('^[_%w]+$')\n"
+		"		if t then table.insert(targets, t) end\n"
+		"	end\n"
+		"	if #targets==0 then table.insert(targets, '') end\n"
+		"	vmake(table.unpack(targets))\n"
 		"end\n"
 		;
 
