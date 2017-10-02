@@ -98,6 +98,12 @@ function shell(...)
 	return r
 end
 
+function shell_execute(...)
+	local cmd = args_concat(...)
+	print(cmd)
+	if not os.execute(cmd) then os.exit(1) end
+end
+
 -- thread tasks
 
 function fetch_includes_by_regex(src, include_paths)

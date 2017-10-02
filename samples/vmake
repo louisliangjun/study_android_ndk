@@ -77,6 +77,7 @@ vmake_target_add('demo1', function(target)
 	local output = path_concat(OUTPATH, target, 'lib', ANDROID_TOOLCHAIN_ABI, 'lib'..target..'.so')
 	return make_target(output, {objs, slibs}
 			, CC, CFLAGS, ANDROID_LINKER_FLAGS
+			, '-u ANativeActivity_onCreate'	-- NOTICE : native_app_glue need export this
 			, '-shared', '-o', output
 			, objs, slibs, libs
 			)
@@ -89,34 +90,13 @@ vmake_target_add('all', function(target)
 	for target in pairs(targets) do vmake(target) end
 end)
 
-local function match_aapt_apk(target, match)
-	if target~=match and match~='all' then return end
-
-	local aapt = path_concat(ANDROID_SDK_BUILD_TOOL_ROOT, 'aapt')
-	local dst = path_concat(OUTPATH, target)
-	local src = path_concat('..', '..', target)
-	local apk = target..'.apk'
-
-	local gen_apk_cmd = args_concat( 'cd '..dst.. ' &&'
-		, aapt, 'p', '-f'
-		, '-F', apk
-		, '-S', path_concat(src, 'res')
-		, '-M', path_concat(src, 'AndroidManifest.xml')
-		, '-I', path_concat(ANDROID_SDK_ROOT, 'platforms', 'android-'..ANDROID_API_LEVEL, 'android.jar')
-		)
-	print(gen_apk_cmd)
-	if not os.execute(gen_apk_cmd) then os.exit(1) end
-
-	-- add libs
-	local libs = scan_files(path_concat(dst, 'lib'), function(v) return v end, true)
-	for _, f in ipairs(libs) do
-		local add_apk_cmd = args_concat('cd '..dst.. ' &&', aapt, 'a', '-v', apk, path_concat('lib', f))
-		print(add_apk_cmd)
-		if not os.execute(add_apk_cmd) then os.exit(1) end
-	end
-end
-
 android_after_vmake_target = function(target)
+	local function match_aapt_apk(target, match)
+		if target==match or match=='all' then
+			android_apk_build(target, OUTPATH)
+		end
+	end
+
 	match_aapt_apk('demo1', target)
 	-- match_aapt_apk('demo2', target)
 end

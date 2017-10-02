@@ -57,7 +57,7 @@ local _ABS_PATH = shell((vlua.OS=='windows') and 'cd .. && cd' or 'cd .. && pwd'
 ANDROID_SDK_ROOT         = path_concat(_ABS_PATH, 'android-sdk')
 ANDROID_NDK_ROOT         = path_concat(_ABS_PATH, 'android-ndk')
 ANDROID_ARCH             = vlua.match_arg('^%-arch=(.*)$') or '*'
-ANDROID_API_LEVEL        = vlua.match_arg('^%-api=(.*)$') or '21'
+ANDROID_API_LEVEL        = vlua.match_arg('^%-api=(.*)$') or '26'
 ANDROID_GCC_VERSION      = vlua.match_arg('^%-gcc%-ver=(.*)$') or '4.9'
 
 local _TOOLCHAIN = _TOOLCHAINS[ANDROID_ARCH] or _TOOLCHAINS['x86_64']
@@ -127,6 +127,47 @@ if ANDROID_ARCH=='x86' then
 	ANDROID_CFLAGS = array_pack(ANDROID_CFLAGS, '-mstackrealign')
 end
 
+-- apk utils
+-- 
+function android_apk_build(target, outpath)
+	local aapt = path_concat(ANDROID_SDK_BUILD_TOOL_ROOT, 'aapt')
+	local dst = path_concat(outpath, target)
+	local src = path_concat('..', '..', target)
+	local ap_ = target..'.ap_'
+	local apk = target..'.apk'
+
+	-- compile res
+	shell_execute( 'cd '..dst.. ' &&'	-- use <dst> path
+		, aapt, 'package', '-f'
+		, '-F', ap_
+		, '-S', path_concat(src, 'res')
+		, '-M', path_concat(src, 'AndroidManifest.xml')
+		, '-I', path_concat(ANDROID_SDK_ROOT, 'platforms', 'android-'..ANDROID_API_LEVEL, 'android.jar')
+		)
+
+	-- add libs
+	local libs = scan_files(path_concat(dst, 'lib'), function(v) return v end, true)
+	for _, f in ipairs(libs) do
+		shell_execute( 'cd '..dst.. ' &&'	-- use <dst> path
+			, aapt, 'a', '-v', ap_
+			, path_concat('lib', f)
+			)
+	end
+
+	-- signer
+	shell_execute( 'cd '..dst.. ' &&'	-- use <dst> path
+		, 'jarsigner'
+		-- , '-digestalg SHA1', '-sigalg MD5withRSA'
+		-- , '-tsa', 'http://tsa.starfieldtech.com'
+		, '-keystore', path_concat('..', '..', 'keystore', 'study_android_ndk.keystore')
+		, '-storepass', 'study_android_ndk'
+		, '-keypass', 'study_android_ndk'
+		, '-signedjar', apk
+		, ap_
+		, 'StudyAndroidNDK'
+		)
+end
+
 -- multi arch compile supports
 -- 
 function main()
@@ -137,7 +178,7 @@ function main()
 	end
 
 	if #targets==0 then
-		print('usage : ./vmake <target> [-arch=*|x86_64|arm|arm64|...] [-api=21] [-debug]')
+		print('usage : ./vmake <target> [-arch=*|x86_64|arm|arm64|...] [-api=26] [-debug]')
 		return
 	end
 

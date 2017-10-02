@@ -1,0 +1,11 @@
+build NOTICE:
+
+1 build libdemo1.so use src/*.c and static lib native_app_glue
+
+2 native_app_glue need export ANativeActivity_onCreate(), libdemo1.so linker need use "-u ANativeActivity_onCreate"
+
+3 AndroidMainifest.xml need:
+  * <application android:hasCode="false"> -- hasCode=false means not use any java code
+  * demo1 not generate R.java, so this xml can NOT use "@string/app_name"
+
+4 apk MUST use jarsigner, all samples use keystore/study_android_ndk.keystore

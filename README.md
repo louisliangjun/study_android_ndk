@@ -1,6 +1,12 @@
 study android ndk
 ===========
 
+* for study, all samples NOT use ndk-build and AndroidStudio
+* use lua as build script because of it's powerful, simple and very small
+* all samples build script in samples/vmake
+* android build utils in tools/vmake_android.lua
+* vmake base utils in tools/vmake_base.lua
+ 
 project file struct
 -----------
 
@@ -8,6 +14,7 @@ project file struct
 <this-dir>
   |
   +-- <android-ndk>    # android-ndk root path
+  +-- <android-sdk>    # android-sdk root path
   |
   +-- <3rd>            # some useful thrid-part-libs
   |
@@ -24,8 +31,13 @@ project file struct
   |     +-- vlua.c            # vlua source code
   |     +-- vmake_base.lua    # vmake used lua utils
   |     +-- vmake_android.lua # vmake used lua android utils
+  |     |
+  |     +-- <keystore>
+  |           |
+  |           +-- study_android_ndk.keystore  # NOTICE : samples used keystore for apk sign
+  |           +-- readme.txt                  # generate yourself keystore readme
   |
-  +-- readme.txt	   # this file
+  +-- README.txt	   # this file
 ```
 
 vlua - make tool with lua script
@@ -40,7 +52,7 @@ samples build
 -----------
 
 * all samples use one make script: ./samples/vmake
-* usage : ./vmake [target] [-debug] [-api=21] [-arch=arm] [-jN] 
+* usage : ./vmake [target] [-debug] [-api=26] [-arch=*] [-jN] 
 
 ```
 cd ./samples
