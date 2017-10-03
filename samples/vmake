@@ -41,7 +41,7 @@ local function make_ndk_static_lib(target)
 	end
 	local objs = make_objs(srcs, {}, objpath_build, function(t) return ANDROID_CC, ANDROID_CFLAGS, CFLAGS, flags, incs, '-o', t.obj, '-c', t.src end)
 	local output = path_concat(OUTPATH, 'objs', ANDROID_ARCH, 'lib'..target..'.a')
-	return make_target(output, objs, ANDROID_AR, '-rc', output, objs)
+	return make_target(output, objs, ANDROID_AR, 'rc', output, objs)
 end
 
 vmake_target_add('clean', function(target)
@@ -59,7 +59,7 @@ vmake_target_add('lua53', function(target)
 	end)
 	local objs = make_c2objs(srcs, {}, lua_cflags)
 	local output = path_concat(OUTPATH, 'objs', ANDROID_ARCH, 'lib'..target..'.a')
-	return make_target(output, objs, ANDROID_AR, '-rc', output, objs)
+	return make_target(output, objs, ANDROID_AR, 'rc', output, objs)
 end)
 
 vmake_target_add('native_app_glue', make_ndk_static_lib)

@@ -51,7 +51,7 @@ elseif ANDROID_TOOLCHAIN=='clang' then
 
 	ANDROID_CC  = path_concat(ANDROID_TOOLCHAIN_ROOT, 'bin', 'clang')
 	ANDROID_CXX = path_concat(ANDROID_TOOLCHAIN_ROOT, 'bin', 'clang++')
-	ANDROID_AR  = path_concat(ANDROID_TOOLCHAIN_ROOT, 'bin', '-llvm-ar')
+	ANDROID_AR  = path_concat(ANDROID_TOOLCHAIN_ROOT, 'bin', 'llvm-ar')
 
 else
 	error('unknown toolchain:'..tostring(ANDROID_TOOLCHAIN))
@@ -309,6 +309,12 @@ function main()
 
 	if #targets==0 then
 		print('usage: ./vmake <target> [-options ...]')
+		print()
+		print('targets:')
+		for k in pairs(vmake_target_all()) do table.insert(targets, k) end
+		table.sort(targets)
+		for _, target in ipairs(targets) do print('  ' .. target) end
+		print()
 		print('options:')
 		local function print_exist(option, exist)
 			if exist then
@@ -327,7 +333,7 @@ function main()
 		print_exist('-debug', vlua.match_arg('^%-debug$'))
 		print('  -arm='..ANDROID_ARM_MODE)
 		print_exist('-arm-neon', ANDROID_ARM_NEON)
-		return
+		return print()
 	end
 
 	local depth = vlua.match_arg('^%-vmake%-depth=(%d+)$')
