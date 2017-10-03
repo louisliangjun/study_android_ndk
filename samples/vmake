@@ -1,22 +1,17 @@
 #!../tools/vlua
 
--- usage : ./vmake <target> [-arch=*|x86_64|arm|arm64|...] [-api=21] [-debug]
-
 dofile('../tools/vmake_base.lua')
 dofile('../tools/vmake_android.lua')
 
 local _DEBUG       = vlua.match_arg('^%-debug$')
 
-local CC        = ANDROID_TOOLCHAIN_BIN_PREFIX..'gcc'
-local CXX       = ANDROID_TOOLCHAIN_BIN_PREFIX..'g++'
-local AR        = ANDROID_TOOLCHAIN_BIN_PREFIX..'ar'
 local OUTPATH   = _DEBUG and '_debug' or '_release'
-local CFLAGS    = { ANDROID_CFLAGS
-				  , '-Wall'
-				  , _DEBUG and '-g' or '-O2'
-				  }
-
+local CFLAGS    = { '-Wall' }
 local LUA_PATH  = '../3rd/lua-5.3.4/src'
+
+if vlua.match_arg('^%-debug$') then
+	table.insert(CFLAGS, '-g')
+end
 
 local function make_c2objs(srcs, include_paths, ...)	-- ... is cflags
 	if type(srcs)=='string' then srcs = scan_files(srcs, function(f) return f:match('^.+%.c$') end) end
@@ -24,7 +19,7 @@ local function make_c2objs(srcs, include_paths, ...)	-- ... is cflags
 	local incs = array_convert(include_paths, function(v) return '-I'..v end)
 	return make_objs(srcs, include_paths
 		, function(f) return path_concat(OUTPATH, 'objs', ANDROID_ARCH, f) end
-		, function(t) return CC, CFLAGS, flags, incs, '-o', t.obj, '-c', t.src end)
+		, function(t) return ANDROID_CC, ANDROID_CFLAGS, CFLAGS, flags, incs, '-o', t.obj, '-c', t.src end)
 end
 
 local function make_cpp2objs(srcs, include_paths, ...)	-- ... is cflags
@@ -33,7 +28,7 @@ local function make_cpp2objs(srcs, include_paths, ...)	-- ... is cflags
 	local incs = array_convert(include_paths, function(v) return '-I'..v end)
 	return make_objs(srcs, include_paths
 		, function(f) return path_concat(OUTPATH, 'objs', ANDROID_ARCH, f) end
-		, function(t) return CXX, CFLAGS, flags, incs, '-o', t.obj, '-c', t.src end)
+		, function(t) return ANDROID_CXX, ANDROID_CFLAGS, ANDROID_CXX_CFLAGS, CFLAGS, flags, incs, '-o', t.obj, '-c', t.src end)
 end
 
 local function make_ndk_static_lib(target)
@@ -44,9 +39,9 @@ local function make_ndk_static_lib(target)
 		local src_offset = #src_path + 2
 		objpath_build = function(f) return path_concat(OUTPATH, 'objs', ANDROID_ARCH, target, f:sub(src_offset)) end
 	end
-	local objs = make_objs(srcs, {}, objpath_build, function(t) return CC, CFLAGS, flags, incs, '-o', t.obj, '-c', t.src end)
+	local objs = make_objs(srcs, {}, objpath_build, function(t) return ANDROID_CC, ANDROID_CFLAGS, CFLAGS, flags, incs, '-o', t.obj, '-c', t.src end)
 	local output = path_concat(OUTPATH, 'objs', ANDROID_ARCH, 'lib'..target..'.a')
-	return make_target(output, objs, AR, '-rc', output, objs)
+	return make_target(output, objs, ANDROID_AR, '-rc', output, objs)
 end
 
 vmake_target_add('clean', function(target)
@@ -64,7 +59,7 @@ vmake_target_add('lua53', function(target)
 	end)
 	local objs = make_c2objs(srcs, {}, lua_cflags)
 	local output = path_concat(OUTPATH, 'objs', ANDROID_ARCH, 'lib'..target..'.a')
-	return make_target(output, objs, AR, '-rc', output, objs)
+	return make_target(output, objs, ANDROID_AR, '-rc', output, objs)
 end)
 
 vmake_target_add('native_app_glue', make_ndk_static_lib)
@@ -74,9 +69,9 @@ vmake_target_add('demo1', function(target)
 	local libs = {'-llog', '-landroid'}
 	local incs = { ANDROID_NDK_ROOT..'/sources/android/native_app_glue' }
 	local objs = make_c2objs(path_concat(target,'src'), incs)
-	local output = path_concat(OUTPATH, target, 'lib', ANDROID_TOOLCHAIN_ABI, 'lib'..target..'.so')
+	local output = path_concat(OUTPATH, target, 'lib', ANDROID_ABI, 'lib'..target..'.so')
 	return make_target(output, {objs, slibs}
-			, CC, CFLAGS, ANDROID_LINKER_FLAGS
+			, ANDROID_CC, ANDROID_CFLAGS, CFLAGS, ANDROID_LINKER_FLAGS
 			, '-u ANativeActivity_onCreate'	-- NOTICE : native_app_glue need export this
 			, '-shared', '-o', output
 			, objs, slibs, libs

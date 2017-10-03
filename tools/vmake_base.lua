@@ -2,8 +2,8 @@
 
 -- utils
 
-function array_pack(...)
-	local arr = {}
+function array_push(arr, ...)
+	if type(arr)~='table' then arr = arr and {arr} or {} end
 
 	local function _pack(t)
 		if t==nil then
@@ -20,6 +20,20 @@ function array_pack(...)
 		_pack(select(i, ...))
 	end
 	return arr
+end
+
+-- array_pack('a', {'b', {'c'}}, 'd'}) ==> {'a','b','c','d'}
+-- 
+function array_pack(...)
+	return array_push({}, ...)
+end
+
+-- args_concat('a', 'b', 'c') ==> 'a b c'
+-- args_concat( {'a', 'b'}, 'c') ==> 'a b c'
+-- args_concat('a', {'b'}, {'c'}) ==> 'a b c'
+-- 
+function args_concat(...)
+	return table.concat(array_pack(...), ' ')
 end
 
 function array_convert(arr, convert)
@@ -43,14 +57,6 @@ function table_convert(tbl, convert)
 		if o then table.insert(outs, o) end
 	end
 	return outs
-end
-
--- args_concat('a', 'b', 'c') ==> 'a b c'
--- args_concat( {'a', 'b'}, 'c') ==> 'a b c'
--- args_concat('a', {'b'}, {'c'}) ==> 'a b c'
--- 
-function args_concat(...)
-	return table.concat(array_pack(...), ' ')
 end
 
 function scan_files(path, matcher, no_path_prefix, no_loop)
