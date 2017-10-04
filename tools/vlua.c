@@ -4,6 +4,10 @@
 // 
 // compile : gcc -s -O2 -pthread -Wall -DLUA_USE_LINUX -I./3rd/lua53 -o vlua ./vlua.c ./3rd/lua53/*.c -lm -ldl
 // 
+// msys2 compile :
+//  pacman -S lua
+//  gcc -static -s -O2 -Wall -o vlua ./vlua.c /mingw64/lib/liblua.a -lm
+// 
 // mingw compile :
 //  cd ../3rd/lua-5.3.4 && make mingw
 //  gcc -s -O2 -Wall -I../3rd/lua-5.3.4/src -o vlua ./vlua.c ../3rd/lua-5.3.4/src/liblua.a -lm

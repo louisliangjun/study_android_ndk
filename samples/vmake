@@ -44,6 +44,13 @@ local function make_ndk_static_lib(target)
 	return make_target(output, objs, ANDROID_AR, 'rc', output, objs)
 end
 
+vmake_target_add('all', function(target)
+	local targets = vmake_target_all()
+	targets.clean = nil
+	targets.all = nil
+	for target in pairs(targets) do vmake(target) end
+end)
+
 vmake_target_add('clean', function(target)
 	local rm = vlua.OS=='windows' and 'rd /S /Q ' or 'rm -rf '
 	os.execute(rm .. '_debug')
@@ -76,13 +83,6 @@ vmake_target_add('native_activity', function(target)
 			, '-shared', '-o', output
 			, objs, slibs, libs
 			)
-end)
-
-vmake_target_add('all', function(target)
-	local targets = vmake_target_all()
-	targets.clean = nil
-	targets.all = nil
-	for target in pairs(targets) do vmake(target) end
 end)
 
 android_after_vmake_target = function(target)

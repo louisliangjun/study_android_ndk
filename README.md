@@ -7,6 +7,10 @@ study android ndk
 * android build utils in tools/vmake_android.lua
 * vmake base utils in tools/vmake_base.lua
  
+environ
+-----------
+* sdk need jre support, make sure jre/bin in PATH
+
 project file struct
 -----------
 

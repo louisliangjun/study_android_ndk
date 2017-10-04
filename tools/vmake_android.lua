@@ -6,8 +6,8 @@ local host_tag = (vlua.OS=='windows') and 'windows-x86_64' or 'linux-x86_64'
 
 -- android environ settings
 -- 
-ANDROID_SDK_ROOT        = vlua.match_arg('^%-sdk=(.+)$') or vlua.filename_format(vlua.path .. '/../android-sdk') -- default use <vlua-path>/../android-sdk
-ANDROID_NDK_ROOT        = vlua.match_arg('^%-ndk=(.+)$') or vlua.filename_format(vlua.path .. '/../android-ndk') -- default use <vlua-path>/../android-ndk
+ANDROID_SDK_ROOT        = vlua.match_arg('^%-sdk=(.+)$') or path_concat(vlua.filename_format(vlua.path .. '/../'), 'android-sdk') -- default use <vlua-path>/../android-sdk
+ANDROID_NDK_ROOT        = vlua.match_arg('^%-ndk=(.+)$') or path_concat(vlua.filename_format(vlua.path .. '/../'), 'android-ndk') -- default use <vlua-path>/../android-ndk
 ANDROID_TOOLCHAIN       = vlua.match_arg('^%-toolchain=(.+)$') or 'gcc' -- 'gcc' or 'clang'
 ANDROID_API_LEVEL       = vlua.match_arg('^%-api=(.+)$') or '26' -- platform api level
 ANDROID_ARCH            = vlua.match_arg('^%-arch=(.+)$') or '*' -- -arch=* means all, -arch="arm x86" mean multi, 'arm','arm64','x86','x86_64','mips','mips64'
@@ -242,17 +242,19 @@ do
 end
 
 
--- TODO : how to find right aapt ?? which file or iter dir ?? or sdk/tools/source.properties(Revision=26.0.1)
+-- TODO : how to find right aapt ?? which file or iter dir ?? or sdk/tools/source.properties(Revision=26.0.2)
 -- 
-ANDROID_SDK_BUILD_TOOL_ROOT = path_concat(ANDROID_SDK_ROOT, 'build-tools', '26.0.1')
+ANDROID_SDK_BUILD_TOOL_ROOT = path_concat(ANDROID_SDK_ROOT, 'build-tools', '26.0.2')
 do
 	local aapt = (vlua.OS=='windows' and 'aapt.exe' or 'aapt')
-	local pth = path_concat(ANDROID_SDK_ROOT, 'build-tools')
-	local fs, ds = vlua.file_list(pth)
-	for _, d in ipairs(ds) do
-		if vlua.file_stat(path_concat(pth, d, aapt)) then
-			ANDROID_SDK_BUILD_TOOL_ROOT = path_concat(pth, d)
-			break
+	if not vlua.file_stat(path_concat(ANDROID_SDK_BUILD_TOOL_ROOT, aapt)) then
+		local pth = path_concat(ANDROID_SDK_ROOT, 'build-tools')
+		local fs, ds = vlua.file_list(pth)
+		for _, d in ipairs(ds) do
+			if vlua.file_stat(path_concat(pth, d, aapt)) then
+				ANDROID_SDK_BUILD_TOOL_ROOT = path_concat(pth, d)
+				break
+			end
 		end
 	end
 end
@@ -261,6 +263,7 @@ end
 -- 
 function android_apk_build(target, outpath)
 	local aapt = path_concat(ANDROID_SDK_BUILD_TOOL_ROOT, 'aapt')
+	local apksigner = path_concat(ANDROID_SDK_BUILD_TOOL_ROOT, 'apksigner')
 	local dst = path_concat(outpath, target)
 	local src = path_concat('..', '..', target)
 	local ap_ = target..'.ap_'
@@ -286,6 +289,18 @@ function android_apk_build(target, outpath)
 
 	-- signer
 	shell_execute( 'cd '..dst.. ' &&'	-- use <dst> path
+		, apksigner, 'sign'
+		, '--ks', path_concat('..', '..', '..', 'keystore', 'study_android_ndk.keystore')
+		, '--ks-key-alias', 'StudyAndroidNDK'
+		, '--ks-pass', 'pass:study_android_ndk'
+		, '--key-pass', 'pass:study_android_ndk'
+		, '--out', apk
+		, ap_
+		)
+
+	--[[
+	-- build-tools ver < 25
+	shell_execute( 'cd '..dst.. ' &&'	-- use <dst> path
 		, 'jarsigner'
 		-- , '-digestalg SHA1', '-sigalg MD5withRSA'
 		-- , '-tsa', 'http://tsa.starfieldtech.com'
@@ -296,6 +311,39 @@ function android_apk_build(target, outpath)
 		, ap_
 		, 'StudyAndroidNDK'
 		)
+	--]]
+end
+
+-- help & cli
+-- 
+local function show_help()
+	print('usage: ./vmake <target> [-options ...]')
+	print()
+	print('targets:')
+	local targets = {}
+	for k in pairs(vmake_target_all()) do table.insert(targets, k) end
+	table.sort(targets)
+	for _, target in ipairs(targets) do print('  ' .. target) end
+	print()
+	print('options:')
+	local function print_exist(option, exist)
+		if exist then
+			print('  ' .. option)
+		else
+			print('  [' .. option .. ']')
+		end
+	end
+	print('  -sdk='..ANDROID_SDK_ROOT)
+	print('  -ndk='..ANDROID_NDK_ROOT)
+	print('  -toolchain='..ANDROID_TOOLCHAIN)
+	print('  -api='..ANDROID_API_LEVEL)
+	print('  -arch='..ANDROID_ARCH)
+	print('  -stl='..ANDROID_STL)
+	print_exist('-pie', ANDROID_PIE)
+	print_exist('-debug', vlua.match_arg('^%-debug$'))
+	print('  -arm='..ANDROID_ARM_MODE)
+	print_exist('-arm-neon', ANDROID_ARM_NEON)
+	print()
 end
 
 -- multi arch compile supports
@@ -307,34 +355,7 @@ function main()
 		if t then table.insert(targets, t) end
 	end
 
-	if #targets==0 then
-		print('usage: ./vmake <target> [-options ...]')
-		print()
-		print('targets:')
-		for k in pairs(vmake_target_all()) do table.insert(targets, k) end
-		table.sort(targets)
-		for _, target in ipairs(targets) do print('  ' .. target) end
-		print()
-		print('options:')
-		local function print_exist(option, exist)
-			if exist then
-				print('  ' .. option)
-			else
-				print('  [' .. option .. ']')
-			end
-		end
-		print('  -sdk='..ANDROID_SDK_ROOT)
-		print('  -ndk='..ANDROID_NDK_ROOT)
-		print('  -toolchain='..ANDROID_TOOLCHAIN)
-		print('  -api='..ANDROID_API_LEVEL)
-		print('  -arch='..ANDROID_ARCH)
-		print('  -stl='..ANDROID_STL)
-		print_exist('-pie', ANDROID_PIE)
-		print_exist('-debug', vlua.match_arg('^%-debug$'))
-		print('  -arm='..ANDROID_ARM_MODE)
-		print_exist('-arm-neon', ANDROID_ARM_NEON)
-		return print()
-	end
+	if #targets==0 then return show_help() end
 
 	local depth = vlua.match_arg('^%-vmake%-depth=(%d+)$')
 	depth = (math.tointeger(depth) or 0)
