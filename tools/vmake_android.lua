@@ -289,7 +289,7 @@ function android_apk_build(target, outpath)
 		, 'jarsigner'
 		-- , '-digestalg SHA1', '-sigalg MD5withRSA'
 		-- , '-tsa', 'http://tsa.starfieldtech.com'
-		, '-keystore', path_concat('..', '..', 'keystore', 'study_android_ndk.keystore')
+		, '-keystore', path_concat('..', '..', '..', 'keystore', 'study_android_ndk.keystore')
 		, '-storepass', 'study_android_ndk'
 		, '-keypass', 'study_android_ndk'
 		, '-signedjar', apk

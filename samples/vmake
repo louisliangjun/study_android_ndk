@@ -64,7 +64,7 @@ end)
 
 vmake_target_add('native_app_glue', make_ndk_static_lib)
 
-vmake_target_add('demo1', function(target)
+vmake_target_add('native_activity', function(target)
 	local slibs = vmake('native_app_glue')
 	local libs = {'-llog', '-landroid'}
 	local incs = { ANDROID_NDK_ROOT..'/sources/android/native_app_glue' }
@@ -92,7 +92,7 @@ android_after_vmake_target = function(target)
 		end
 	end
 
-	match_aapt_apk('demo1', target)
+	match_aapt_apk('native_activity', target)
 	-- match_aapt_apk('demo2', target)
 end
 

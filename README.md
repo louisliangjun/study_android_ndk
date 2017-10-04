@@ -20,10 +20,15 @@ project file struct
   |
   +-- <samples>
   |     |
-  |     +-- <demoXXX>
+  |     +-- <native_activity> # first sample, compile android sample without IDE
   |     |
   |     +-- vmake      # samples used makefile with vlua
   |     +-- vmake.cmd  # windows used vmake
+  |
+  +-- <keystore>
+  |     |
+  |     +-- study_android_ndk.keystore  # NOTICE : samples used keystore for apk sign
+  |     +-- readme.txt                  # generate yourself keystore readme
   |
   +-- <tools>
   |     |
@@ -31,11 +36,6 @@ project file struct
   |     +-- vlua.c            # vlua source code
   |     +-- vmake_base.lua    # vmake used lua utils
   |     +-- vmake_android.lua # vmake used lua android utils
-  |     |
-  |     +-- <keystore>
-  |           |
-  |           +-- study_android_ndk.keystore  # NOTICE : samples used keystore for apk sign
-  |           +-- readme.txt                  # generate yourself keystore readme
   |
   +-- README.txt	   # this file
 ```
@@ -59,9 +59,9 @@ cd ./samples
 ./vmake
 ./vmake all -debug
 ./vmake all -arch=arm -j8
-./vmake all -arch=arm -debug
-./vmake demo1 -debug -arch=arm
-./vmake demo1 -debug -api=25 -arch=amd64
+./vmake all -arch="arm x86" -debug
+./vmake native_activity -debug -arch=*
+./vmake native_activity -debug -api=25 -arch=amd64
 ```
 
 * more tips: see ./samples/vmake
