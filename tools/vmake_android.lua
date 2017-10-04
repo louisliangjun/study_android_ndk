@@ -263,7 +263,6 @@ end
 -- 
 function android_apk_build(target, outpath)
 	local aapt = path_concat(ANDROID_SDK_BUILD_TOOL_ROOT, 'aapt')
-	local apksigner = path_concat(ANDROID_SDK_BUILD_TOOL_ROOT, 'apksigner')
 	local dst = path_concat(outpath, target)
 	local src = path_concat('..', '..', target)
 	local ap_ = target..'.ap_'
@@ -289,18 +288,6 @@ function android_apk_build(target, outpath)
 
 	-- signer
 	shell_execute( 'cd '..dst.. ' &&'	-- use <dst> path
-		, apksigner, 'sign'
-		, '--ks', path_concat('..', '..', '..', 'keystore', 'study_android_ndk.keystore')
-		, '--ks-key-alias', 'StudyAndroidNDK'
-		, '--ks-pass', 'pass:study_android_ndk'
-		, '--key-pass', 'pass:study_android_ndk'
-		, '--out', apk
-		, ap_
-		)
-
-	--[[
-	-- build-tools ver < 25
-	shell_execute( 'cd '..dst.. ' &&'	-- use <dst> path
 		, 'jarsigner'
 		-- , '-digestalg SHA1', '-sigalg MD5withRSA'
 		-- , '-tsa', 'http://tsa.starfieldtech.com'
@@ -310,6 +297,19 @@ function android_apk_build(target, outpath)
 		, '-signedjar', apk
 		, ap_
 		, 'StudyAndroidNDK'
+		)
+
+	--[[
+	-- TODO : not work in linux, java exception ...
+	-- 
+	shell_execute( 'cd '..dst.. ' &&'	-- use <dst> path
+		, path_concat(ANDROID_SDK_BUILD_TOOL_ROOT, 'apksigner'), 'sign'
+		, '--ks', path_concat('..', '..', '..', 'keystore', 'study_android_ndk.keystore')
+		, '--ks-key-alias', 'StudyAndroidNDK'
+		, '--ks-pass', 'pass:study_android_ndk'
+		, '--key-pass', 'pass:study_android_ndk'
+		, '--out', apk
+		, ap_
 		)
 	--]]
 end
