@@ -3,9 +3,12 @@
 dofile('../tools/vmake_base.lua')
 dofile('../tools/vmake_android.lua')
 
-local _DEBUG       = vlua.match_arg('^%-debug$')
+-- install:
+-- ../android-sdk/platform-tools/adb install ./_release/native_activity/native_activity.apk
+-- ../android-sdk/platform-tools/adb uninstall com.study.ndk.native_activity
+-- ../android-sdk/platform-tools/adb shell
 
-local OUTPATH   = _DEBUG and '_debug' or '_release'
+local OUTPATH   = ANDROID_DEBUG_MODE and '_debug' or '_release'
 local CFLAGS    = { '-Wall' }
 local LUA_PATH  = '../3rd/lua-5.3.4/src'
 
