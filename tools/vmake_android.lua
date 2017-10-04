@@ -15,6 +15,7 @@ ANDROID_PIE             = vlua.match_arg('^%-pie$') or (math.tointeger(ANDROID_A
 ANDROID_ARM_MODE        = vlua.match_arg('^%-arm=(.+)$') or 'thumb' -- 'arm', 'thumb'
 ANDROID_ARM_NEON        = vlua.match_arg('^%-arm%-neon$')
 ANDROID_STL             = vlua.match_arg('^%-stl=(.+)$') or 'gnustl_static' -- 'system', 'stlport_static', 'stlport_shared', 'gnustl_static', 'gnustl_shared', 'c++_static', 'c++_shared', 'none'
+ANDROID_DEBUG_MODE      = vlua.match_arg('^%-debug$')
 
 local _ARCHS =
 	{ ['arm']    = { name = 'arm-linux-androideabi',  prefix = 'arm-linux-androideabi',  abi = 'armeabi-v7a' }
@@ -148,7 +149,7 @@ end
 
 -- debug & release
 -- 
-if vlua.match_arg('^%-debug$') then
+if ANDROID_DEBUG_MODE then
 	array_push(ANDROID_CFLAGS, '-D_DEBUG', '-O0')
 	if ANDROID_TOOLCHAIN=='clang' then
 		array_push(ANDROID_CFLAGS, '-fno-limit-debug-info')
@@ -274,6 +275,7 @@ function android_apk_build(target, outpath)
 		, '-F', ap_
 		, '-S', path_concat(src, 'res')
 		, '-M', path_concat(src, 'AndroidManifest.xml')
+		, ANDROID_DEBUG_MODE and '--debug-mode' or ''
 		, '-I', path_concat(ANDROID_SDK_ROOT, 'platforms', 'android-'..ANDROID_API_LEVEL, 'android.jar')
 		)
 
@@ -282,25 +284,11 @@ function android_apk_build(target, outpath)
 	for _, f in ipairs(libs) do
 		shell_execute( 'cd '..dst.. ' &&'	-- use <dst> path
 			, aapt, 'a', '-v', ap_
-			, path_concat('lib', f)
+			, string.format('lib/%s', f)	-- NOTICE: can not use path_concat() in windows.
 			)
 	end
 
 	-- signer
-	shell_execute( 'cd '..dst.. ' &&'	-- use <dst> path
-		, 'jarsigner'
-		-- , '-digestalg SHA1', '-sigalg MD5withRSA'
-		-- , '-tsa', 'http://tsa.starfieldtech.com'
-		, '-keystore', path_concat('..', '..', '..', 'keystore', 'study_android_ndk.keystore')
-		, '-storepass', 'study_android_ndk'
-		, '-keypass', 'study_android_ndk'
-		, '-signedjar', apk
-		, ap_
-		, 'StudyAndroidNDK'
-		)
-
-	--[[
-	-- TODO : not work in linux, java exception ...
 	-- 
 	shell_execute( 'cd '..dst.. ' &&'	-- use <dst> path
 		, path_concat(ANDROID_SDK_BUILD_TOOL_ROOT, 'apksigner'), 'sign'
@@ -311,7 +299,6 @@ function android_apk_build(target, outpath)
 		, '--out', apk
 		, ap_
 		)
-	--]]
 end
 
 -- help & cli
@@ -340,7 +327,7 @@ local function show_help()
 	print('  -arch='..ANDROID_ARCH)
 	print('  -stl='..ANDROID_STL)
 	print_exist('-pie', ANDROID_PIE)
-	print_exist('-debug', vlua.match_arg('^%-debug$'))
+	print_exist('-debug', ANDROID_DEBUG_MODE)
 	print('  -arm='..ANDROID_ARM_MODE)
 	print_exist('-arm-neon', ANDROID_ARM_NEON)
 	print()

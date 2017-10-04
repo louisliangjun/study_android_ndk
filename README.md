@@ -9,7 +9,7 @@ study android ndk
  
 environ
 -----------
-* sdk need jre support, make sure jre/bin in PATH
+* sdk need jdk8 support, make sure jre/bin in PATH
 
 project file struct
 -----------

@@ -87,6 +87,10 @@ function path_concat(...)
 	return table.concat(array_pack(...), '/')
 end
 
+function path_concat(...)
+	return table.concat(array_pack(...), '/')
+end
+
 if vlua.OS=='windows' then
 	path_concat = function(...)
 		local pth = table.concat(array_pack(...), '/')
