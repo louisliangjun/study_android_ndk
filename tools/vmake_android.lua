@@ -84,6 +84,11 @@ ANDROID_LINKER_FLAGS =
 	, '-Wl,--fatal-warnings'
 	}
 
+ANDROID_LINKER_FLAGS_EXE =
+	{ '-Wl,--gc-sections'
+	, '-Wl,-z,nocopyreloc'
+	}
+
 ANDROID_CXX_CFLAGS = {}
 ANDROID_CXX_LIBS = {}
 
@@ -125,7 +130,7 @@ end
 -- pie
 -- 
 if ANDROID_PIE then
-	array_push(ANDROID_LINKER_FLAGS, '-pie', '-fPIE')
+	array_push(ANDROID_LINKER_FLAGS_EXE, '-pie', '-fPIE')
 end
 
 -- cpp features, default not use this

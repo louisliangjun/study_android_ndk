@@ -92,7 +92,7 @@ end)
 vmake_target_add('native_app_glue', make_ndk_static_lib)
 
 -- this demo copy & modify from android samples
--- install & test ok on anroid 6.0.1, but android 4.4.4 not work ...
+-- install & test
 --[[
 export PATH=$PATH:../android-sdk/platform-tools
 adb uninstall com.study.ndk.native_activity
@@ -102,12 +102,12 @@ cat /proc/cpuinfo  # show abi
 --]]
 vmake_target_add('native_activity', function(target)
 	local slibs = vmake('native_app_glue')
-	local libs = {'-llog', '-landroid'}
-	local incs = { ANDROID_NDK_ROOT..'/sources/android/native_app_glue' }
+	local libs = {'-llog', '-landroid', '-lEGL', '-lGLESv1_CM'}
+	local incs = {ANDROID_NDK_ROOT..'/sources/android/native_app_glue'}
 	local objs = make_c2objs(path_concat(target,'src'), incs)
 	local output = path_concat(OUTPATH, target, 'lib', ANDROID_ABI, 'lib'..target..'.so')
 	return make_target(output, {objs, slibs}
-			, ANDROID_CC, ANDROID_CFLAGS, CFLAGS, ANDROID_LINKER_FLAGS
+			, ANDROID_CC, ANDROID_CFLAGS, CFLAGS, ANDROID_LINKER_FLAGS, ANDROID_LINKER_FLAGS_EXE
 			, '-u ANativeActivity_onCreate'	-- NOTICE : native_app_glue need export this
 			, '-shared', '-o', output
 			, objs, slibs, libs
