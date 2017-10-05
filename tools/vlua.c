@@ -1515,7 +1515,7 @@ static int run(lua_State* L, const char* script) {
 		"		__maked_targets[target] = output\n"
 		"		return output\n"
 		"	end\n"
-		"	print('unknown target:', target)\n"
+		"	error('unknown target: '..tostring(target))\n"
 		"end\n"
 		"\n"
 		"function vmake(...)\n"

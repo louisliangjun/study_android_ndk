@@ -122,8 +122,7 @@ function fetch_includes_by_regex(src, include_paths)
 	local function search_include_path(inc, paths)
 		if paths==nil then return false end
 		for _, pth in ipairs(paths) do
-			if pth~='' then pth = pth:match('^.*[\\/]$') or pth end
-			local inc_file = path_concat(pth, inc)
+			local inc_file = vlua.filename_format(path_concat(pth, inc))
 			local exist, size, mtime = vlua.file_stat(inc_file)
 			if exist then
 				res[inc_file] = mtime
@@ -233,7 +232,7 @@ function compile_tasks_fetch_deps(tasks, include_paths)
 	for _, t in ipairs(tasks) do
 		local exist, size, mtime = vlua.file_stat(t.src)
 		if not exist then error('file not found: ' .. t.src) end
-		parse_file(t.src, mtime)
+		parse_file(vlua.filename_format(t.src), mtime)
 	end
 
 	vlua.thread_pool:wait(function(src, res)
@@ -241,6 +240,7 @@ function compile_tasks_fetch_deps(tasks, include_paths)
 		local incs = {}
 		includes[src] = incs
 		for inc, mtime in pairs(res) do
+			-- print('  >> add ', inc, mtime)
 			table.insert(incs, inc)
 			parse_file(inc, mtime)
 		end

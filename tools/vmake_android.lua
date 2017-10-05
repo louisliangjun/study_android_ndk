@@ -243,6 +243,10 @@ do
 		error('unknown stl:'..tostring(ANDROID_STL))
 	end
 
+	for _, pth in ipairs(stl_incs) do
+		array_push(ANDROID_CXX_CFLAGS, '-I'..pth)
+	end
+
 	if ANDROID_ABI=='armeabi' and (ANDROID_STL~='system' and ANDROID_STL~='none') then
 		array_push(ANDROID_CXX_LIBS, '-latomic')
 	end
@@ -355,7 +359,7 @@ local function vmake_multi_abis(depth, targets)
 			local abi = v:match('^%-abi=(.*)$')
 			if abi then table.insert(abis, abi) end
 		end
-		if #abis==1 then return vmake(vmake(table.unpack(targets))) end
+		if #abis==1 then return vmake(table.unpack(targets)) end
 	end
 
 	local cmds = { vlua.self, vlua.script }

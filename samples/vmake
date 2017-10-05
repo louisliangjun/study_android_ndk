@@ -13,33 +13,37 @@ end
 
 local function make_c2objs(srcs, include_paths, ...)	-- ... is cflags
 	if type(srcs)=='string' then srcs = scan_files(srcs, function(f) return f:match('^.+%.c$') end) end
-	local flags = args_concat(...)
+	local cflags = args_concat(...)
 	local incs = array_convert(include_paths, function(v) return '-I'..v end)
 	return make_objs(srcs, include_paths
 		, function(f) return path_concat(OUTPATH, 'objs', ANDROID_ABI, f) end
-		, function(t) return ANDROID_CC, ANDROID_CFLAGS, CFLAGS, flags, incs, '-o', t.obj, '-c', t.src end)
+		, function(t) return ANDROID_CC, ANDROID_CFLAGS, CFLAGS, cflags, incs, '-o', t.obj, '-c', t.src end)
 end
 
 local function make_cpp2objs(srcs, include_paths, ...)	-- ... is cflags
 	if type(srcs)=='string' then srcs = scan_files(srcs, function(f) return f:match('^.+%.cpp$') end) end
-	local flags = args_concat(...)
+	local cflags = args_concat(...)
 	local incs = array_convert(include_paths, function(v) return '-I'..v end)
 	return make_objs(srcs, include_paths
 		, function(f) return path_concat(OUTPATH, 'objs', ANDROID_ABI, f) end
-		, function(t) return ANDROID_CXX, ANDROID_CFLAGS, ANDROID_CXX_CFLAGS, CFLAGS, flags, incs, '-o', t.obj, '-c', t.src end)
+		, function(t) return ANDROID_CXX, ANDROID_CFLAGS, ANDROID_CXX_CFLAGS, CFLAGS, cflags, incs, '-o', t.obj, '-c', t.src end)
 end
 
 local function make_ndk_static_lib(target)
 	local src_path, is_abs_path = vlua.filename_format(path_concat(ANDROID_NDK_ROOT, 'sources', 'android', target))
+	local incs = {ANDROID_NDK_ROOT..'/sources/android/native_app_glue'}
+	local cflags = array_convert(incs, function(v) return '-I'..v end)
 	local srcs = scan_files(src_path, function(f) return f:match('^.+%.c$') end)
+	local cppsrcs = scan_files(src_path, function(f) return f:match('^.+%.cpp$') end)
 	local objpath_build = function(f) return path_concat(OUTPATH, 'objs', ANDROID_ABI, target, f) end
 	if is_abs_path then
 		local src_offset = #src_path + 2
 		objpath_build = function(f) return path_concat(OUTPATH, 'objs', ANDROID_ABI, target, f:sub(src_offset)) end
 	end
-	local objs = make_objs(srcs, {}, objpath_build, function(t) return ANDROID_CC, ANDROID_CFLAGS, CFLAGS, flags, incs, '-o', t.obj, '-c', t.src end)
+	local objs = make_objs(srcs, incs, objpath_build, function(t) return ANDROID_CC, ANDROID_CFLAGS, CFLAGS, cflags, '-o', t.obj, '-c', t.src end)
+	local cppobjs = make_objs(cppsrcs, incs, objpath_build, function(t) return ANDROID_CXX, ANDROID_CFLAGS, ANDROID_CXX_CFLAGS, CFLAGS, cflags, '-o', t.obj, '-c', t.src end)
 	local output = path_concat(OUTPATH, 'objs', ANDROID_ABI, 'lib'..target..'.a')
-	return make_target(output, objs, ANDROID_AR, 'rc', output, objs)
+	return make_target(output, {objs, cppobjs}, ANDROID_AR, 'rc', output, objs, cppobjs)
 end
 
 vmake_target_add('all', function(target)
@@ -83,13 +87,14 @@ vmake_target_add('hello', function(target)
 	local objs = make_c2objs(path_concat(target,'src'))
 	local output = path_concat(OUTPATH, target, ANDROID_ABI, target)
 	return make_target(output, objs
-			, ANDROID_CC, ANDROID_CFLAGS, CFLAGS, ANDROID_LINKER_FLAGS
+			, ANDROID_CC, ANDROID_CFLAGS, CFLAGS, ANDROID_LINKER_FLAGS, ANDROID_LINKER_FLAGS_EXE
 			, '-o', output
 			, objs, libs
 			)
 end)
 
 vmake_target_add('native_app_glue', make_ndk_static_lib)
+vmake_target_add('ndk_helper', make_ndk_static_lib)
 
 -- this demo copy & modify from android samples
 -- install & test
@@ -107,10 +112,28 @@ vmake_target_add('native_activity', function(target)
 	local objs = make_c2objs(path_concat(target,'src'), incs)
 	local output = path_concat(OUTPATH, target, 'lib', ANDROID_ABI, 'lib'..target..'.so')
 	return make_target(output, {objs, slibs}
-			, ANDROID_CC, ANDROID_CFLAGS, CFLAGS, ANDROID_LINKER_FLAGS, ANDROID_LINKER_FLAGS_EXE
+			, ANDROID_CC, ANDROID_CFLAGS, CFLAGS, ANDROID_LINKER_FLAGS
 			, '-u ANativeActivity_onCreate'	-- NOTICE : native_app_glue need export this
 			, '-shared', '-o', output
 			, objs, slibs, libs
+			)
+end)
+
+vmake_target_add('nuklear', function(target)
+	local slibs = vmake('native_app_glue', 'ndk_helper')
+	local libs = {'-lEGL', '-lGLESv2', '-llog', '-landroid', '-lm'}
+	local incs =
+		{ ANDROID_NDK_ROOT..'/sources/android/native_app_glue'
+		, ANDROID_NDK_ROOT..'/sources/android/ndk_helper'
+		}
+	local objs = make_c2objs(path_concat(target,'src'), incs, '-Wno-unused-function')
+	local cppobjs = make_cpp2objs(path_concat(target,'src'), incs, '-Wno-unused-function')
+	local output = path_concat(OUTPATH, target, 'lib', ANDROID_ABI, 'lib'..target..'.so')
+	return make_target(output, {objs, cppobjs, slibs}
+			, ANDROID_CC, ANDROID_CFLAGS, CFLAGS, ANDROID_LINKER_FLAGS
+			, '-u ANativeActivity_onCreate'	-- NOTICE : native_app_glue need export this
+			, '-shared', '-o', output
+			, objs, cppobjs, slibs, libs, ANDROID_CXX_LIBS
 			)
 end)
 
@@ -134,6 +157,6 @@ android_after_vmake_target = function(target)
 	end
 
 	match_aapt_apk('native_activity', target)
-	-- match_aapt_apk('demo2', target)
+	match_aapt_apk('nuklear', target)
 end
 
