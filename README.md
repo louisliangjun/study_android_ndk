@@ -56,16 +56,16 @@ samples build
 -----------
 
 * all samples use one make script: ./samples/vmake
-* usage : ./vmake [target] [-debug] [-api=26] [-arch=*] [-jN] 
+* usage : ./vmake [target] [-debug] [-api=26] [-abi=*] [-jN] 
 
 ```
 cd ./samples
 ./vmake
 ./vmake all -debug
-./vmake all -arch=arm -j8
-./vmake all -arch="arm x86" -debug
-./vmake native_activity -debug -arch=*
-./vmake native_activity -debug -api=25 -arch=amd64
+./vmake all -abi=armeabi-v7a -j8
+./vmake all -abi=armeabi-v7a -abi=x86 -debug
+./vmake native_activity -debug -abi=*
+./vmake native_activity -debug -api=25 -abi=amd64
 ```
 
 * more tips: see ./samples/vmake

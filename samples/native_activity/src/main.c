@@ -1,4 +1,4 @@
-// main.cpp
+// main.c
 
 #include <memory.h>
 #include <stdlib.h>

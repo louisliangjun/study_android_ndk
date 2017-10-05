@@ -3,11 +3,6 @@
 dofile('../tools/vmake_base.lua')
 dofile('../tools/vmake_android.lua')
 
--- install:
--- ../android-sdk/platform-tools/adb install ./_release/native_activity/native_activity.apk
--- ../android-sdk/platform-tools/adb uninstall com.study.ndk.native_activity
--- ../android-sdk/platform-tools/adb shell
-
 local OUTPATH   = ANDROID_DEBUG_MODE and '_debug' or '_release'
 local CFLAGS    = { '-Wall' }
 local LUA_PATH  = '../3rd/lua-5.3.4/src'
@@ -21,7 +16,7 @@ local function make_c2objs(srcs, include_paths, ...)	-- ... is cflags
 	local flags = args_concat(...)
 	local incs = array_convert(include_paths, function(v) return '-I'..v end)
 	return make_objs(srcs, include_paths
-		, function(f) return path_concat(OUTPATH, 'objs', ANDROID_ARCH, f) end
+		, function(f) return path_concat(OUTPATH, 'objs', ANDROID_ABI, f) end
 		, function(t) return ANDROID_CC, ANDROID_CFLAGS, CFLAGS, flags, incs, '-o', t.obj, '-c', t.src end)
 end
 
@@ -30,20 +25,20 @@ local function make_cpp2objs(srcs, include_paths, ...)	-- ... is cflags
 	local flags = args_concat(...)
 	local incs = array_convert(include_paths, function(v) return '-I'..v end)
 	return make_objs(srcs, include_paths
-		, function(f) return path_concat(OUTPATH, 'objs', ANDROID_ARCH, f) end
+		, function(f) return path_concat(OUTPATH, 'objs', ANDROID_ABI, f) end
 		, function(t) return ANDROID_CXX, ANDROID_CFLAGS, ANDROID_CXX_CFLAGS, CFLAGS, flags, incs, '-o', t.obj, '-c', t.src end)
 end
 
 local function make_ndk_static_lib(target)
 	local src_path, is_abs_path = vlua.filename_format(path_concat(ANDROID_NDK_ROOT, 'sources', 'android', target))
 	local srcs = scan_files(src_path, function(f) return f:match('^.+%.c$') end)
-	local objpath_build = function(f) return path_concat(OUTPATH, 'objs', ANDROID_ARCH, target, f) end
+	local objpath_build = function(f) return path_concat(OUTPATH, 'objs', ANDROID_ABI, target, f) end
 	if is_abs_path then
 		local src_offset = #src_path + 2
-		objpath_build = function(f) return path_concat(OUTPATH, 'objs', ANDROID_ARCH, target, f:sub(src_offset)) end
+		objpath_build = function(f) return path_concat(OUTPATH, 'objs', ANDROID_ABI, target, f:sub(src_offset)) end
 	end
 	local objs = make_objs(srcs, {}, objpath_build, function(t) return ANDROID_CC, ANDROID_CFLAGS, CFLAGS, flags, incs, '-o', t.obj, '-c', t.src end)
-	local output = path_concat(OUTPATH, 'objs', ANDROID_ARCH, 'lib'..target..'.a')
+	local output = path_concat(OUTPATH, 'objs', ANDROID_ABI, 'lib'..target..'.a')
 	return make_target(output, objs, ANDROID_AR, 'rc', output, objs)
 end
 
@@ -60,20 +55,51 @@ vmake_target_add('clean', function(target)
 	os.execute(rm .. '_release')
 end)
 
-vmake_target_add('lua53', function(target)
-	local lua_cflags = vlua.OS=='windows' and '' or '-DLUA_USE_LINUX'
-	local srcs = scan_files(LUA_PATH, function(f)
-			if f=='lua.c' then return end
-			if f=='luac.c' then return end
-			return f:match('^.+%.c$')
-	end)
-	local objs = make_c2objs(srcs, {}, lua_cflags)
-	local output = path_concat(OUTPATH, 'objs', ANDROID_ARCH, 'lib'..target..'.a')
-	return make_target(output, objs, ANDROID_AR, 'rc', output, objs)
+-- this demo is a linux program, only for test gdb remote debug
+-- install & test
+--[[
+# host
+export PATH=$PATH:../android-sdk/platform-tools
+adb push ../android-ndk/prebuilt/android-arm/gdbserver/gdbserver /data/local/tmp/
+adb push ./_debug/hello/armeabi-v7a/hello /data/local/tmp/
+../android-sdk/tools/monitor # show android log
+
+# phone
+cd /data/local/tmp/
+chmod 777 gdbserver
+chmod 777 hello
+./gdbserver :7788 ./hello
+#gdbserver :7788 --attach 1234
+
+# host
+adb forward tcp:7788 tcp:7788
+../android-ndk/prebuilt/linux-x86_64/bin/gdb
+target remote 127.0.0.1:7788
+b main.c:15   # add break at main.c:15
+c             # continue
+--]]
+vmake_target_add('hello', function(target)
+	local libs = {'-llog', '-landroid'}
+	local objs = make_c2objs(path_concat(target,'src'))
+	local output = path_concat(OUTPATH, target, ANDROID_ABI, target)
+	return make_target(output, objs
+			, ANDROID_CC, ANDROID_CFLAGS, CFLAGS, ANDROID_LINKER_FLAGS
+			, '-o', output
+			, objs, libs
+			)
 end)
 
 vmake_target_add('native_app_glue', make_ndk_static_lib)
 
+-- this demo copy & modify from android samples
+-- install & test ok on anroid 6.0.1, but android 4.4.4 not work ...
+--[[
+export PATH=$PATH:../android-sdk/platform-tools
+adb uninstall com.study.ndk.native_activity
+adb install ./_debug/native_activity/native_activity.apk
+adb shell
+cat /proc/cpuinfo  # show abi
+--]]
 vmake_target_add('native_activity', function(target)
 	local slibs = vmake('native_app_glue')
 	local libs = {'-llog', '-landroid'}
@@ -86,6 +112,18 @@ vmake_target_add('native_activity', function(target)
 			, '-shared', '-o', output
 			, objs, slibs, libs
 			)
+end)
+
+vmake_target_add('lua53', function(target)
+	local lua_cflags = vlua.OS=='windows' and '' or '-DLUA_USE_LINUX'
+	local srcs = scan_files(LUA_PATH, function(f)
+		if f=='lua.c' then return end
+		if f=='luac.c' then return end
+		return f:match('^.+%.c$')
+	end)
+	local objs = make_c2objs(srcs, {}, lua_cflags)
+	local output = path_concat(OUTPATH, 'objs', ANDROID_ABI, 'lib'..target..'.a')
+	return make_target(output, objs, ANDROID_AR, 'rc', output, objs)
 end)
 
 android_after_vmake_target = function(target)

@@ -10,20 +10,21 @@ ANDROID_SDK_ROOT        = vlua.match_arg('^%-sdk=(.+)$') or path_concat(vlua.fil
 ANDROID_NDK_ROOT        = vlua.match_arg('^%-ndk=(.+)$') or path_concat(vlua.filename_format(vlua.path .. '/../'), 'android-ndk') -- default use <vlua-path>/../android-ndk
 ANDROID_TOOLCHAIN       = vlua.match_arg('^%-toolchain=(.+)$') or 'gcc' -- 'gcc' or 'clang'
 ANDROID_API_LEVEL       = vlua.match_arg('^%-api=(.+)$') or '26' -- platform api level
-ANDROID_ARCH            = vlua.match_arg('^%-arch=(.+)$') or '*' -- -arch=* means all, -arch="arm x86" mean multi, 'arm','arm64','x86','x86_64','mips','mips64'
+ANDROID_ABI             = vlua.match_arg('^%-abi=(.+)$') or '*' -- "-abi=*" means all, "-abi=armeabi-v7a -abi=x86" mean multi, ABIS: armeabi,armeabi-v7a,arm64-v8a,mips,mips64,x86,x86_64
 ANDROID_PIE             = vlua.match_arg('^%-pie$') or (math.tointeger(ANDROID_API_LEVEL) < 16) -- true or false
 ANDROID_ARM_MODE        = vlua.match_arg('^%-arm=(.+)$') or 'thumb' -- 'arm', 'thumb'
 ANDROID_ARM_NEON        = vlua.match_arg('^%-arm%-neon$')
 ANDROID_STL             = vlua.match_arg('^%-stl=(.+)$') or 'gnustl_static' -- 'system', 'stlport_static', 'stlport_shared', 'gnustl_static', 'gnustl_shared', 'c++_static', 'c++_shared', 'none'
 ANDROID_DEBUG_MODE      = vlua.match_arg('^%-debug$')
 
-local _ARCHS =
-	{ ['arm']    = { name = 'arm-linux-androideabi',  prefix = 'arm-linux-androideabi',  abi = 'armeabi-v7a' }
-	, ['arm64']  = { name = 'aarch64-linux-android',  prefix = 'aarch64-linux-android',  abi = 'arm64-v8a' }
-	, ['x86']    = { name = 'x86',                    prefix = 'i686-linux-android',     abi = 'x86' }
-	, ['x86_64'] = { name = 'x86_64',                 prefix = 'x86_64-linux-android',   abi = 'x86_64' }
-	, ['mips']   = { name = 'mipsel-linux-android',   prefix = 'mipsel-linux-android',   abi = 'mips' }
-	, ['mips64'] = { name = 'mips64el-linux-android', prefix = 'mips64el-linux-android', abi = 'mips64'}
+local _ABIS =
+	{ ['armeabi']       = { name = 'arm-linux-androideabi',  prefix = 'arm-linux-androideabi',  arch = 'arm' }
+	, ['armeabi-v7a']   = { name = 'arm-linux-androideabi',  prefix = 'arm-linux-androideabi',  arch = 'arm' }
+	, ['arm64-v8a']     = { name = 'aarch64-linux-android',  prefix = 'aarch64-linux-android',  arch = 'arm64' }
+	, ['x86']           = { name = 'x86',                    prefix = 'i686-linux-android',     arch = 'x86' }
+	, ['x86_64']        = { name = 'x86_64',                 prefix = 'x86_64-linux-android',   arch = 'x86_64' }
+	, ['mips']          = { name = 'mipsel-linux-android',   prefix = 'mipsel-linux-android',   arch = 'mips' }
+	, ['mips64']        = { name = 'mips64el-linux-android', prefix = 'mips64el-linux-android', arch = 'mips64'}
 	}
 
 -- fetch toolchain name, prefix, abi by settings
@@ -31,11 +32,11 @@ local _ARCHS =
 do
 	-- android environ exports
 	-- 
-	local tc = _ARCHS[ANDROID_ARCH] or _ARCHS['arm']
+	local tc = _ABIS[ANDROID_ABI] or _ABIS['armeabi-v7a']
 
 	ANDROID_TOOLCHAIN_NAME   = tc.name
 	ANDROID_TOOLCHAIN_PREFIX = tc.prefix
-	ANDROID_ABI              = tc.abi
+	ANDROID_ARCH             = tc.arch
 end
 
 -- android compiler tools
@@ -301,7 +302,7 @@ function android_apk_build(target, outpath)
 		)
 end
 
--- help & cli
+-- help
 -- 
 local function show_help()
 	print('usage: ./vmake <target> [-options ...]')
@@ -324,7 +325,7 @@ local function show_help()
 	print('  -ndk='..ANDROID_NDK_ROOT)
 	print('  -toolchain='..ANDROID_TOOLCHAIN)
 	print('  -api='..ANDROID_API_LEVEL)
-	print('  -arch='..ANDROID_ARCH)
+	print('  -abi='..ANDROID_ABI)
 	print('  -stl='..ANDROID_STL)
 	print_exist('-pie', ANDROID_PIE)
 	print_exist('-debug', ANDROID_DEBUG_MODE)
@@ -335,6 +336,43 @@ end
 
 -- multi arch compile supports
 -- 
+local function vmake_multi_abis(depth, targets)
+	local abis = {}
+	local args = vlua.fetch_args()
+
+	if ANDROID_ABI=='*' then
+		for k,v in pairs(_ABIS) do
+			local jni_h = path_concat(ANDROID_NDK_ROOT, 'platforms', 'android-'..ANDROID_API_LEVEL, 'arch-'..v.arch, 'usr', 'include', 'jni.h')
+			if vlua.file_stat(jni_h) then table.insert(abis, k) end
+		end
+	else
+		for _,v in ipairs(args) do
+			local abi = v:match('^%-abi=(.*)$')
+			if abi then table.insert(abis, abi) end
+		end
+		if #abis==1 then return vmake(vmake(table.unpack(targets))) end
+	end
+
+	local cmds = { vlua.self, vlua.script }
+	for _,v in ipairs(args) do
+		if v:match('^%-abi=(.*)$') then
+			-- ignore all -abi
+		elseif v:match('^%-vmake%-depth=.*$') then
+			-- ignore -vlua-depth=XX
+		else
+			table.insert(cmds, v)
+		end
+	end
+
+	local vmake_depth = string.format('-vmake-depth=%d', depth+1)
+	for _, abi in ipairs(abis) do
+		local vmake_abi = string.format('-abi=%s', abi)
+		local cmd = args_concat(cmds, vmake_depth, vmake_abi)
+		print( '$ ' .. cmd )
+		if not os.execute(cmd) then os.exit(1) end
+	end
+end
+
 function main()
 	local targets = {}
 	for _,v in ipairs(vlua.fetch_args()) do
@@ -347,42 +385,10 @@ function main()
 	local depth = vlua.match_arg('^%-vmake%-depth=(%d+)$')
 	depth = (math.tointeger(depth) or 0)
 
-	if _ARCHS[ANDROID_ARCH] then
+	if depth > 0 then
 		vmake(table.unpack(targets))
 	else
-		local platforms = {}
-		if ANDROID_ARCH=='*' then
-			local fs, ds = vlua.file_list( path_concat(ANDROID_NDK_ROOT, 'platforms', 'android-'..ANDROID_API_LEVEL) )
-			for _, d in ipairs(ds) do
-				local platform = d:match('^arch%-(.+)$')
-				if platform then table.insert(platforms, platform) end
-			end
-		else
-			for platform in ANDROID_ARCH:gmatch('[_%w]+') do
-				if not _ARCHS[platform] then error('bad -arch: '..platform) end
-				table.insert(platforms, platform)
-			end
-		end
-
-		local cmds = { vlua.self, vlua.script }
-		for _,v in ipairs(vlua.fetch_args()) do
-			if v:match('^%-arch=(.*)$') then
-				-- ignore -arch=XX
-			elseif v:match('^%-vmake%-depth=.*$') then
-				-- ignore -vlua-depth=XX
-			else
-				table.insert(cmds, v)
-			end
-		end
-
-		local vmake_depth = string.format('-vmake-depth=%d', depth+1)
-
-		for _, platform in ipairs(platforms) do
-			local vmake_arch = string.format('-arch=%s', platform)
-			local cmd = args_concat(cmds, vmake_depth, vmake_arch)
-			print( '$ ' .. cmd )
-			if not os.execute(cmd) then os.exit(1) end
-		end
+		vmake_multi_abis(depth, targets)
 	end
 
 	if depth==0 and android_after_vmake_target then
