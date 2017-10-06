@@ -15,23 +15,12 @@ using namespace ndk_helper;
 #define MAX_VERTEX_MEMORY 512 * 1024
 #define MAX_ELEMENT_MEMORY 128 * 1024
 
-struct saved_state {
-	float angle;
-	int32_t x;
-	int32_t y;
-};
-
 struct engine {
 	struct android_app* app;
-	GLContext* ctx;
-	struct nk_context* nk_ctx;
-
 	ASensorManager* sensorManager;
 	const ASensor* accelerometerSensor;
 	ASensorEventQueue* sensorEventQueue;
-
-    struct saved_state state;
-    int animating;
+	struct nk_context* nk;
 };
 
 static void nk_gui_demo(struct nk_context* ctx) {
@@ -79,13 +68,15 @@ static void nk_gui_demo(struct nk_context* ctx) {
  */
 static void engine_draw_frame(struct engine* engine) {
     // Just fill the screen with a color.
-    glClearColor(0, 1.0, 0, 1);
+    glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
-	nk_gui_demo(engine->nk_ctx);
+	if( engine->nk ) {
+		nk_gui_demo(engine->nk);
+		nk_glesv2_render(NK_ANTI_ALIASING_ON, MAX_VERTEX_MEMORY, MAX_ELEMENT_MEMORY);
+	}
 
-	nk_glesv2_render(NK_ANTI_ALIASING_ON, MAX_VERTEX_MEMORY, MAX_ELEMENT_MEMORY);
-	engine->ctx->Swap();
+	GLContext::GetInstance()->Swap();
 }
 
 /**
@@ -94,14 +85,43 @@ static void engine_draw_frame(struct engine* engine) {
 static int32_t engine_handle_input(struct android_app* app, AInputEvent* event) {
     struct engine* engine = (struct engine*)app->userData;
     int32_t res = 0;
-    nk_input_begin(engine->nk_ctx);
-    if (AInputEvent_getType(event) == AINPUT_EVENT_TYPE_MOTION) {
-        engine->state.x = AMotionEvent_getX(event, 0);
-        engine->state.y = AMotionEvent_getY(event, 0);
-        res = 1;
+    if( engine->nk ) {
+        nk_input_begin(engine->nk);
+        res = nk_glesv2_handle_event(event);
+        nk_input_end(engine->nk);
     }
-    nk_input_end(engine->nk_ctx);
     return res;
+}
+
+static void engine_get_window_size(void* ud, int* w, int* h) {
+    GLContext* glctx = (GLContext*)ud;
+	if( w ) *w = glctx->GetScreenWidth();
+	if( h ) *h = glctx->GetScreenHeight();
+}
+
+static const nk_glesv2_iface nk_iface =
+	{ engine_get_window_size
+	, engine_get_window_size
+	};
+
+static void nk_init(struct engine* engine) {
+	engine->nk = nk_glesv2_init(&nk_iface, GLContext::GetInstance());
+
+    /* Load Fonts: if none of these are loaded a default font will be used  */
+    /* Load Cursor: if you uncomment cursor loading please hide the cursor */
+    {
+    	struct nk_font_atlas *atlas;
+		nk_glesv2_font_stash_begin(&atlas);
+		/*struct nk_font *droid = nk_font_atlas_add_from_file(atlas, "../../../extra_font/DroidSans.ttf", 14, 0);*/
+		/*struct nk_font *roboto = nk_font_atlas_add_from_file(atlas, "../../../extra_font/Roboto-Regular.ttf", 16, 0);*/
+		/*struct nk_font *future = nk_font_atlas_add_from_file(atlas, "../../../extra_font/kenvector_future_thin.ttf", 13, 0);*/
+		/*struct nk_font *clean = nk_font_atlas_add_from_file(atlas, "../../../extra_font/ProggyClean.ttf", 12, 0);*/
+		/*struct nk_font *tiny = nk_font_atlas_add_from_file(atlas, "../../../extra_font/ProggyTiny.ttf", 10, 0);*/
+		/*struct nk_font *cousine = nk_font_atlas_add_from_file(atlas, "../../../extra_font/Cousine-Regular.ttf", 13, 0);*/
+		nk_glesv2_font_stash_end();
+		/*nk_style_load_all_cursors(ctx, atlas->cursors);*/
+		/*nk_style_set_font(ctx, &roboto->handle)*/;
+    }
 }
 
 /**
@@ -112,20 +132,18 @@ static void engine_handle_cmd(struct android_app* app, int32_t cmd) {
     switch (cmd) {
         case APP_CMD_SAVE_STATE:
             // The system has asked us to save our current state.  Do so.
-            engine->app->savedState = malloc(sizeof(struct saved_state));
-            *((struct saved_state*)engine->app->savedState) = engine->state;
-            engine->app->savedStateSize = sizeof(struct saved_state);
             break;
         case APP_CMD_INIT_WINDOW:
             // The window is being shown, get it ready.
             if (engine->app->window != NULL) {
             	GLContext::GetInstance()->Init(engine->app->window);
+            	nk_init(engine);
                 engine_draw_frame(engine);
             }
             break;
         case APP_CMD_TERM_WINDOW:
             // The window is being hidden or closed, clean it up.
-            engine->ctx->Invalidate();
+            GLContext::GetInstance()->Invalidate();
             break;
         case APP_CMD_GAINED_FOCUS:
             // When our app gains focus, we start monitoring the accelerometer.
@@ -202,17 +220,6 @@ ASensorManager* AcquireASensorManagerInstance(struct android_app* app) {
 }
 
 
-static void engine_get_window_size(void* ud, int* w, int* h) {
-    struct engine* engine = (struct engine*)ud;
-	if( w ) *w = engine->ctx->GetScreenWidth();
-	if( h ) *h = engine->ctx->GetScreenHeight();
-}
-
-static const nk_glesv2_iface nk_iface =
-	{ engine_get_window_size
-	, engine_get_window_size
-	};
-
 /**
  * This is the main entry point of a native application that is using
  * android_native_app_glue.  It runs in its own thread, with its own
@@ -226,7 +233,6 @@ extern "C" void android_main(struct android_app* state) {
     state->onAppCmd = engine_handle_cmd;
     state->onInputEvent = engine_handle_input;
     engine.app = state;
-    engine.ctx = GLContext::GetInstance();
 
     // Prepare to monitor accelerometer
     engine.sensorManager = AcquireASensorManagerInstance(state);
@@ -240,25 +246,6 @@ extern "C" void android_main(struct android_app* state) {
 
     if (state->savedState != NULL) {
         // We are starting with a previous saved state; restore from it.
-        engine.state = *(struct saved_state*)state->savedState;
-    }
-
-	engine.nk_ctx = nk_glesv2_init(&nk_iface, &engine);
-
-    /* Load Fonts: if none of these are loaded a default font will be used  */
-    /* Load Cursor: if you uncomment cursor loading please hide the cursor */
-    {
-    	struct nk_font_atlas *atlas;
-		nk_glesv2_font_stash_begin(&atlas);
-		/*struct nk_font *droid = nk_font_atlas_add_from_file(atlas, "../../../extra_font/DroidSans.ttf", 14, 0);*/
-		/*struct nk_font *roboto = nk_font_atlas_add_from_file(atlas, "../../../extra_font/Roboto-Regular.ttf", 16, 0);*/
-		/*struct nk_font *future = nk_font_atlas_add_from_file(atlas, "../../../extra_font/kenvector_future_thin.ttf", 13, 0);*/
-		/*struct nk_font *clean = nk_font_atlas_add_from_file(atlas, "../../../extra_font/ProggyClean.ttf", 12, 0);*/
-		/*struct nk_font *tiny = nk_font_atlas_add_from_file(atlas, "../../../extra_font/ProggyTiny.ttf", 10, 0);*/
-		/*struct nk_font *cousine = nk_font_atlas_add_from_file(atlas, "../../../extra_font/Cousine-Regular.ttf", 13, 0);*/
-		nk_glesv2_font_stash_end();
-		/*nk_style_load_all_cursors(ctx, atlas->cursors);*/
-		/*nk_style_set_font(ctx, &roboto->handle)*/;
     }
 
     // loop waiting for stuff to do.
@@ -270,7 +257,6 @@ extern "C" void android_main(struct android_app* state) {
         struct android_poll_source* source;
 
         while ((ident=ALooper_pollAll(0, NULL, &events, (void**)&source)) >= 0) {
-
             // Process this event.
             if (source != NULL) {
                 source->process(state, source);
@@ -290,10 +276,14 @@ extern "C" void android_main(struct android_app* state) {
             }
 
             // Check if we are exiting.
-            if (state->destroyRequested != 0) {
-            	engine.ctx->Invalidate();
-                return;
-            }
+            if (state->destroyRequested)
+            	break;
+
+        }
+
+        if (state->destroyRequested) {
+           	GLContext::GetInstance()->Invalidate();
+           	break;
         }
 
 		engine_draw_frame(&engine);

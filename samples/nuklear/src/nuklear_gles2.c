@@ -98,31 +98,14 @@ nk_glesv2_device_create(void)
     glCompileShader(dev->vert_shdr);
     glCompileShader(dev->frag_shdr);
     glGetShaderiv(dev->vert_shdr, GL_COMPILE_STATUS, &status);
-    if( !status ) {
-    	show_shader_error(dev->vert_shdr, "vect");
-    	dev->vert_shdr = 0;
-    }
+    assert (status == GL_TRUE);
     glGetShaderiv(dev->frag_shdr, GL_COMPILE_STATUS, &status);
-    if( !status ) {
-    	show_shader_error(dev->frag_shdr, "frag");
-    	dev->frag_shdr = 0;
-    }
+    assert (status == GL_TRUE);
     glAttachShader(dev->prog, dev->vert_shdr);
     glAttachShader(dev->prog, dev->frag_shdr);
     glLinkProgram(dev->prog);
     glGetProgramiv(dev->prog, GL_LINK_STATUS, &status);
-    if( !status ) {
-    	GLint infoLen = 0;
-		glGetProgramiv(dev->prog, GL_INFO_LOG_LENGTH, &infoLen);
-		if( infoLen > 1 ) {
-			char* infoLog = (char*)malloc (sizeof(char) * infoLen );
-			glGetProgramInfoLog ( dev->prog, infoLen, NULL, infoLog );
-			LOGW("Error linking program:\n%s\n", infoLog );
-			free ( infoLog );
-		}
-		glDeleteProgram(dev->prog);
-		dev->prog = 0;
-    }
+    assert (status == GL_TRUE);
 
     dev->uniform_tex = glGetUniformLocation(dev->prog, "Texture");
     dev->uniform_proj = glGetUniformLocation(dev->prog, "ProjMtx");
@@ -342,13 +325,52 @@ nk_glesv2_font_stash_end(void)
 
 }
 
-/*
 NK_API int
-nk_glesv2_handle_event(SDL_Event *evt)
+nk_glesv2_handle_event(const AInputEvent *evt)
 {
     struct nk_context *ctx = &nk.ctx;
-    if (evt->type == SDL_KEYUP || evt->type == SDL_KEYDOWN) {
-        // key events
+    int evt_type = AInputEvent_getType(evt);
+
+    if (evt_type==AINPUT_EVENT_TYPE_MOTION) {
+        int action = AMotionEvent_getAction(evt);
+		int x = AMotionEvent_getX(evt, 0);
+		int y = AMotionEvent_getY(evt, 0);
+
+        if( action==AMOTION_EVENT_ACTION_DOWN || action==AMOTION_EVENT_ACTION_UP ) {
+		    // mouse button
+		    int down = action==AMOTION_EVENT_ACTION_DOWN;
+		    nk_input_button(ctx, NK_BUTTON_LEFT, x, y, down);
+		    /*
+		    if (evt->button.button == SDL_BUTTON_LEFT) {
+		        if (evt->button.clicks > 1)
+		            nk_input_button(ctx, NK_BUTTON_DOUBLE, x, y, down);
+		        nk_input_button(ctx, NK_BUTTON_LEFT, x, y, down);
+		    } else if (evt->button.button == SDL_BUTTON_MIDDLE) {
+		        nk_input_button(ctx, NK_BUTTON_MIDDLE, x, y, down);
+		    } else if (evt->button.button == SDL_BUTTON_RIGHT) {
+		        nk_input_button(ctx, NK_BUTTON_RIGHT, x, y, down);
+		    }
+		    */
+		    return 1;
+		} else if (action==AMOTION_EVENT_ACTION_MOVE) {
+		    // mouse motion
+		    /*
+		    if (ctx->input.mouse.grabbed) {
+		        nk_input_motion(ctx, x + evt->motion.xrel, y + evt->motion.yrel);
+		    } else {
+     		    nk_input_motion(ctx, x, y);
+     		}
+     		*/
+     		nk_input_motion(ctx, x, y);
+		    return 1;
+		} else if (action==AMOTION_EVENT_ACTION_HOVER_MOVE) {
+		    nk_input_motion(ctx, x, y);
+		    return 1;
+		}
+
+    } else if( evt_type==AINPUT_EVENT_TYPE_KEY ) {
+    	/*
+    	// key events
         int down = evt->type == SDL_KEYDOWN;
         const Uint8* state = SDL_GetKeyboardState(0);
         SDL_Keycode sym = evt->key.keysym.sym;
@@ -400,27 +422,13 @@ nk_glesv2_handle_event(SDL_Event *evt)
             else nk_input_key(ctx, NK_KEY_RIGHT, down);
         } else return 0;
         return 1;
-    } else if (evt->type == SDL_MOUSEBUTTONDOWN || evt->type == SDL_MOUSEBUTTONUP) {
-        // mouse button
-        int down = evt->type == SDL_MOUSEBUTTONDOWN;
-        const int x = evt->button.x, y = evt->button.y;
-        if (evt->button.button == SDL_BUTTON_LEFT) {
-            if (evt->button.clicks > 1)
-                nk_input_button(ctx, NK_BUTTON_DOUBLE, x, y, down);
-            nk_input_button(ctx, NK_BUTTON_LEFT, x, y, down);
-        } else if (evt->button.button == SDL_BUTTON_MIDDLE)
-            nk_input_button(ctx, NK_BUTTON_MIDDLE, x, y, down);
-        else if (evt->button.button == SDL_BUTTON_RIGHT)
-            nk_input_button(ctx, NK_BUTTON_RIGHT, x, y, down);
-        return 1;
-    } else if (evt->type == SDL_MOUSEMOTION) {
-        // mouse motion
-        if (ctx->input.mouse.grabbed) {
-            int x = (int)ctx->input.mouse.prev.x, y = (int)ctx->input.mouse.prev.y;
-            nk_input_motion(ctx, x + evt->motion.xrel, y + evt->motion.yrel);
-        } else nk_input_motion(ctx, evt->motion.x, evt->motion.y);
-        return 1;
-    } else if (evt->type == SDL_TEXTINPUT) {
+		*/
+    }
+/*
+   if (evt->type == SDL_KEYUP || evt->type == SDL_KEYDOWN) {
+   } else if (evt->type == SDL_MOUSEBUTTONDOWN || evt->type == SDL_MOUSEBUTTONUP) {
+   } else if (evt->type == SDL_MOUSEMOTION) {
+   } else if (evt->type == SDL_TEXTINPUT) {
         // text input
         nk_glyph glyph;
         memcpy(glyph, evt->text.text, NK_UTF_SIZE);
@@ -431,9 +439,9 @@ nk_glesv2_handle_event(SDL_Event *evt)
         nk_input_scroll(ctx,nk_vec2((float)evt->wheel.x,(float)evt->wheel.y));
         return 1;
     }
+*/
     return 0;
 }
-*/
 
 NK_API
 void nk_glesv2_shutdown(void)
