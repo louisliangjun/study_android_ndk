@@ -1251,7 +1251,11 @@ static int lua_filename_format(lua_State* L) {
 		cur = start;
 		luaL_addlstring(&B, cur->s, cur->n);
 		for( ++cur; cur < end; ++cur) {
+#ifdef _WIN32
+			luaL_addchar(&B, '\\');
+#else
 			luaL_addchar(&B, '/');
+#endif
 			luaL_addlstring(&B, cur->s, cur->n);
 		}
 	}

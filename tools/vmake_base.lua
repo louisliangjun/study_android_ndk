@@ -84,20 +84,8 @@ function scan_files(path, matcher, no_path_prefix, no_loop)
 end
 
 function path_concat(...)
-	return table.concat(array_pack(...), '/')
-end
-
-function path_concat(...)
-	return table.concat(array_pack(...), '/')
-end
-
-if vlua.OS=='windows' then
-	path_concat = function(...)
-		local pth = table.concat(array_pack(...), '/')
-		pth = pth:gsub('^/(%w)(.*)$', '%1:%2')	-- msys2 - /c/xxx
-		pth = pth:gsub('/','\\')
-		return pth
-	end
+	local pth = vlua.filename_format( table.concat(array_pack(...), '/') )
+	return pth
 end
 
 function shell(...)
@@ -122,7 +110,7 @@ function fetch_includes_by_regex(src, include_paths)
 	local function search_include_path(inc, paths)
 		if paths==nil then return false end
 		for _, pth in ipairs(paths) do
-			local inc_file = vlua.filename_format(path_concat(pth, inc))
+			local inc_file = path_concat(pth, inc)
 			local exist, size, mtime = vlua.file_stat(inc_file)
 			if exist then
 				res[inc_file] = mtime
@@ -232,7 +220,7 @@ function compile_tasks_fetch_deps(tasks, include_paths)
 	for _, t in ipairs(tasks) do
 		local exist, size, mtime = vlua.file_stat(t.src)
 		if not exist then error('file not found: ' .. t.src) end
-		parse_file(vlua.filename_format(t.src), mtime)
+		parse_file(t.src, mtime)
 	end
 
 	vlua.thread_pool:wait(function(src, res)
