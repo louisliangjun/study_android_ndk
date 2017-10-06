@@ -43,23 +43,6 @@ static struct nk_glesv2 {
 
 #define NK_SHADER_VERSION "#version 100\n"
 
-
-static void show_shader_error(int shader, const char* fname) {
-	GLint infoLen = 0;
-	glGetShaderiv ( shader, GL_INFO_LOG_LENGTH, &infoLen );
-	if ( infoLen > 0 ) {
-		char _cache[4096];
-		char* infoLog = infoLen < (sizeof(_cache) - 1) ? _cache : (char*)malloc (sizeof(char) * (infoLen + 1) );
-		glGetShaderInfoLog ( shader, infoLen, NULL, infoLog );
-		infoLog[infoLen] = '\0';
-		LOGW("Error linking program(%s):\r\n%s\r\n", fname, infoLog);
-		if( infoLog!=_cache )
-			free ( infoLog );
-	}
-
-	glDeleteShader ( shader );
-}
-
 NK_API void
 nk_glesv2_device_create(void)
 {
@@ -329,17 +312,27 @@ NK_API int
 nk_glesv2_handle_event(const AInputEvent *evt)
 {
     struct nk_context *ctx = &nk.ctx;
+    int device_id = AInputEvent_getDeviceId(evt);
     int evt_type = AInputEvent_getType(evt);
 
     if (evt_type==AINPUT_EVENT_TYPE_MOTION) {
+    	// size_t num = AMotionEvent_getPointerCount(evt);
+    	int x, y, w, h;
         int action = AMotionEvent_getAction(evt);
-		int x = AMotionEvent_getX(evt, 0);
-		int y = AMotionEvent_getY(evt, 0);
+        int finger = (action & AMOTION_EVENT_ACTION_POINTER_INDEX_MASK) >> 8;
+        // float sz = AMotionEvent_getSize(evt, 0); // touch point size, large finger
+        nk.iface->get_window_size(nk.iface_ud, &w, &h);
+        x = (AMotionEvent_getX(evt, 0) / AMotionEvent_getXPrecision(evt));
+		y = (AMotionEvent_getY(evt, 0) / AMotionEvent_getYPrecision(evt));
+		
+		action &= AMOTION_EVENT_ACTION_MASK;
+		if( finger!=0 ) return 0;	// this demo only use one finger
 
         if( action==AMOTION_EVENT_ACTION_DOWN || action==AMOTION_EVENT_ACTION_UP ) {
 		    // mouse button
 		    int down = action==AMOTION_EVENT_ACTION_DOWN;
 		    nk_input_button(ctx, NK_BUTTON_LEFT, x, y, down);
+     		LOGW("motion device:%d finger:%d action:%d x:%d y:%d w:%d h:%d\n", device_id, finger, action, x, y, w, h);
 		    /*
 		    if (evt->button.button == SDL_BUTTON_LEFT) {
 		        if (evt->button.clicks > 1)
