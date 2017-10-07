@@ -24,7 +24,9 @@ project file struct
   |
   +-- <samples>
   |     |
-  |     +-- <native_activity> # first sample, compile android sample without IDE
+  |     +-- <hello>           # not app, run in console
+  |     +-- <native_activity> # sample app copy from ndk samples, compile not use ndk-build & cmake
+  |     +-- <nuklear>         # nuklear sample test on android
   |     |
   |     +-- vmake      # samples used makefile with vlua
   |     +-- vmake.cmd  # windows used vmake
